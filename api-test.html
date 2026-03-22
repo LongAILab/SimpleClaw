@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nanobot API Test</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #121932;
+      --line: #2b3561;
+      --text: #eef2ff;
+      --muted: #9aa7d8;
+      --accent: #7c9cff;
+      --accent-2: #5eead4;
+      --danger: #fb7185;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1020 0%, #0e1530 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    .sub {
+      margin: 0 0 24px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    .card {
+      background: rgba(18, 25, 50, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #0a0f23;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: #081121;
+      background: var(--accent);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: var(--accent-2);
+    }
+
+    button.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .output, .events {
+      min-height: 220px;
+      max-height: 520px;
+      overflow: auto;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #081121;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #finalOutput {
+      white-space: normal;
+      word-break: break-word;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .chat-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 88%;
+    }
+
+    .chat-row.user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .chat-row.assistant,
+    .chat-row.cron,
+    .chat-row.heartbeat,
+    .chat-row.background,
+    .chat-row.error {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .chat-label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    .chat-bubble {
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      line-height: 1.6;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      white-space: normal;
+    }
+
+    .chat-row.user .chat-bubble {
+      background: linear-gradient(180deg, rgba(124, 156, 255, 0.28), rgba(124, 156, 255, 0.18));
+      border-color: rgba(124, 156, 255, 0.5);
+    }
+
+    .chat-row.assistant .chat-bubble {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .chat-row.cron .chat-bubble {
+      background: linear-gradient(180deg, rgba(94, 234, 212, 0.2), rgba(94, 234, 212, 0.1));
+      border-color: rgba(94, 234, 212, 0.4);
+    }
+
+    .chat-row.heartbeat .chat-bubble {
+      background: linear-gradient(180deg, rgba(251, 191, 36, 0.18), rgba(251, 191, 36, 0.08));
+      border-color: rgba(251, 191, 36, 0.4);
+    }
+
+    .chat-row.background .chat-bubble {
+      background: linear-gradient(180deg, rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.08));
+      border-color: rgba(148, 163, 184, 0.35);
+    }
+
+    .chat-row.error .chat-bubble {
+      background: linear-gradient(180deg, rgba(251, 113, 133, 0.18), rgba(251, 113, 133, 0.08));
+      border-color: rgba(251, 113, 133, 0.4);
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    .ok { color: #86efac; }
+    .warn { color: #fcd34d; }
+    .err { color: var(--danger); }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .fields { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Nanobot API 测试页</h1>
+    <p class="sub">直接测试 <code>/turn</code> 和 <code>/turn/stream</code>，观察普通响应和真实流式输出。</p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>请求参数</h2>
+        <div class="fields">
+          <div class="field full">
+            <label for="baseUrl">API Base URL</label>
+            <input id="baseUrl" value="http://127.0.0.1:18790">
+          </div>
+          <div class="field">
+            <label for="tenantKey">tenant_key</label>
+            <input id="tenantKey" placeholder="例如 tenant-a">
+          </div>
+          <div class="field">
+            <label for="sessionKey">session_id / session_key</label>
+            <input id="sessionKey" placeholder="例如 main:tenant-a">
+          </div>
+          <div class="field full">
+            <label for="conversationId">conversation_id / chat_id（可选）</label>
+            <input id="conversationId" placeholder="留空则默认跟随 session_key">
+          </div>
+          <div class="field full">
+            <label for="messageId">message_id（可选）</label>
+            <input id="messageId" placeholder="例如 msg-001">
+          </div>
+          <div class="field full">
+            <label for="message">message</label>
+            <textarea id="message">你好</textarea>
+          </div>
+          <div class="field full">
+            <label for="images">图片 URL（每行一个，可选）</label>
+            <textarea id="images" style="min-height: 100px;" placeholder="https://mojing2.tos-cn-guangzhou.volces.com/test/example.jpg"></textarea>
+          </div>
+          <div class="field full">
+            <label><input id="debugTrace" type="checkbox" checked style="width:auto; margin-right:8px;">开启调试日志（显示 prompt 快照与异步写操作）</label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="sendNormal">发送普通请求</button>
+          <button id="sendStream" class="secondary">发送流式请求</button>
+          <button id="connectEvents" class="secondary">重新连接后台 SSE</button>
+          <button id="disconnectEvents" class="ghost">断开后台 SSE</button>
+          <button id="abortStream" class="ghost" disabled>停止流式</button>
+          <button id="clear" class="ghost">清空输出</button>
+        </div>
+
+        <p class="hint">前端默认会自动连接后台 SSE，因此 <code>cron</code> / <code>heartbeat</code> 到点后会直接推送到当前主会话。你可以手动填写 <code>tenant_key</code>、<code>session_key</code>、<code>conversation_id</code>；只有留空时才会自动回退到默认值。</p>
+      </section>
+
+      <section class="card">
+        <h2>状态</h2>
+        <div class="meta">
+          <div>请求模式: <span id="mode">-</span></div>
+          <div>HTTP: <span id="httpStatus">-</span></div>
+          <div>首事件: <span id="firstEvent">-</span></div>
+          <div>首 token: <span id="firstText">-</span></div>
+          <div>完成: <span id="finishedAt">-</span></div>
+          <div>后台 SSE: <span id="eventsStatus">-</span></div>
+        </div>
+        <div class="output" id="finalOutput"></div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top: 16px;">
+      <h2>Prompt 快照</h2>
+      <div class="output" id="promptOutput"></div>
+    </section>
+
+    <section class="card" style="margin-top: 16px;">
+      <h2>异步写操作</h2>
+      <div class="events" id="asyncOutput"></div>
+    </section>
+
+    <section class="card" style="margin-top: 16px;">
+      <h2>事件日志</h2>
+      <div class="events" id="events"></div>
+    </section>
+  </div>
+
+  <script>
+    const els = {
+      baseUrl: document.getElementById("baseUrl"),
+      tenantKey: document.getElementById("tenantKey"),
+      sessionKey: document.getElementById("sessionKey"),
+      conversationId: document.getElementById("conversationId"),
+      messageId: document.getElementById("messageId"),
+      message: document.getElementById("message"),
+      images: document.getElementById("images"),
+      debugTrace: document.getElementById("debugTrace"),
+      sendNormal: document.getElementById("sendNormal"),
+      sendStream: document.getElementById("sendStream"),
+      connectEvents: document.getElementById("connectEvents"),
+      disconnectEvents: document.getElementById("disconnectEvents"),
+      abortStream: document.getElementById("abortStream"),
+      clear: document.getElementById("clear"),
+      mode: document.getElementById("mode"),
+      httpStatus: document.getElementById("httpStatus"),
+      firstEvent: document.getElementById("firstEvent"),
+      firstText: document.getElementById("firstText"),
+      finishedAt: document.getElementById("finishedAt"),
+      eventsStatus: document.getElementById("eventsStatus"),
+      finalOutput: document.getElementById("finalOutput"),
+      promptOutput: document.getElementById("promptOutput"),
+      asyncOutput: document.getElementById("asyncOutput"),
+      events: document.getElementById("events"),
+    };
+
+    let activeController = null;
+    let backgroundSource = null;
+    let backgroundStateLabel = "disconnected";
+    let backgroundAutoConnect = true;
+    let backgroundTargetUrl = "";
+    let backgroundReconnectTimer = null;
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function renderMessageHtml(content) {
+      return escapeHtml(content || "").replace(/\r?\n/g, "<br>");
+    }
+
+    function ensureChatMessage(key, kind, label) {
+      let row = key ? els.finalOutput.querySelector('[data-key="' + key + '"]') : null;
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "chat-row " + kind;
+        if (key) {
+          row.dataset.key = key;
+        }
+        const labelEl = document.createElement("div");
+        labelEl.className = "chat-label";
+        const bubbleEl = document.createElement("div");
+        bubbleEl.className = "chat-bubble";
+        row.appendChild(labelEl);
+        row.appendChild(bubbleEl);
+        els.finalOutput.appendChild(row);
+      }
+      row.className = "chat-row " + kind;
+      row.querySelector(".chat-label").textContent = label;
+      return row;
+    }
+
+    function upsertChatMessage({ key = "", kind = "assistant", label = "", content = "" } = {}) {
+      const row = ensureChatMessage(key, kind, label);
+      row.querySelector(".chat-bubble").innerHTML = renderMessageHtml(content);
+      els.finalOutput.scrollTop = els.finalOutput.scrollHeight;
+    }
+
+    function appendChatMessage({ kind = "assistant", label = "", content = "" } = {}) {
+      const key = "msg-" + Date.now() + "-" + Math.random().toString(16).slice(2, 8);
+      upsertChatMessage({ key, kind, label, content });
+      return key;
+    }
+
+    function resolveTenantKey() {
+      return els.tenantKey.value.trim() || "__default__";
+    }
+
+    function resolveSessionKey() {
+      return els.sessionKey.value.trim() || ("main:" + resolveTenantKey());
+    }
+
+    function resolveConversationId() {
+      return els.conversationId.value.trim() || resolveSessionKey();
+    }
+
+    function payload() {
+      const images = els.images.value
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+      const data = {
+        message: els.message.value,
+        tenant_key: resolveTenantKey(),
+        user_id: resolveTenantKey(),
+        session_key: resolveSessionKey(),
+        conversation_id: resolveConversationId(),
+      };
+      if (images.length) {
+        data.images = images;
+      }
+      if (els.messageId.value.trim()) {
+        data.message_id = els.messageId.value.trim();
+      }
+      if (els.debugTrace.checked) {
+        data.debug_trace = true;
+      }
+      return data;
+    }
+
+    function resetStatus(mode) {
+      els.mode.textContent = mode;
+      els.httpStatus.textContent = "-";
+      els.firstEvent.textContent = "-";
+      els.firstText.textContent = "-";
+      els.finishedAt.textContent = "-";
+      els.eventsStatus.textContent = backgroundSource ? "connected" : "-";
+      els.finalOutput.innerHTML = "";
+      els.promptOutput.textContent = "";
+      els.asyncOutput.textContent = "";
+      els.events.textContent = "";
+    }
+
+    function backgroundUrl() {
+      const url = new URL(els.baseUrl.value.replace(/\/$/, "") + "/events/stream");
+      const data = payload();
+      url.searchParams.set("tenant_key", data.tenant_key);
+      url.searchParams.set("conversation_id", data.conversation_id);
+      if (data.session_key) {
+        url.searchParams.set("session_key", data.session_key);
+      }
+      return url.toString();
+    }
+
+    function appendEvent(line, cls = "") {
+      const prefix = cls ? "[" + cls + "] " : "";
+      els.events.textContent += prefix + line + "\n";
+      els.events.scrollTop = els.events.scrollHeight;
+    }
+
+    function appendAsync(line, cls = "") {
+      const prefix = cls ? "[" + cls + "] " : "";
+      els.asyncOutput.textContent += prefix + line + "\n\n";
+      els.asyncOutput.scrollTop = els.asyncOutput.scrollHeight;
+    }
+
+    function ms(sec) {
+      return (sec * 1000).toFixed(0) + " ms";
+    }
+
+    function renderBackgroundPayload(eventName, rawData) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(rawData);
+      } catch (_) {
+        parsed = null;
+      }
+      appendEvent("bg:" + eventName + " -> " + rawData, eventName === "error" ? "err" : "ok");
+      if (!parsed || !parsed.content) {
+        return;
+      }
+      const mapping = {
+        cron_message: { kind: "cron", label: "定时任务" },
+        heartbeat_message: { kind: "heartbeat", label: "Heartbeat" },
+        background_message: { kind: "background", label: "后台消息" },
+      };
+      const resolved = mapping[eventName] || { kind: "background", label: "后台消息" };
+      appendChatMessage({
+        kind: resolved.kind,
+        label: resolved.label,
+        content: parsed.content,
+      });
+    }
+
+    function renderDebugTracePayload(rawData) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(rawData);
+      } catch (_) {
+        parsed = null;
+      }
+      appendEvent("bg:debug_trace -> " + rawData, "ok");
+      if (!parsed) return;
+      const meta = parsed.metadata || {};
+      const title = "[" + (meta._source || "debug") + " / " + (meta._stage || "-") + "]";
+      appendAsync(title + "\n" + (parsed.content || rawData), "ok");
+    }
+
+    function scheduleBackgroundReconnect() {
+      if (backgroundReconnectTimer) {
+        clearTimeout(backgroundReconnectTimer);
+        backgroundReconnectTimer = null;
+      }
+      if (!backgroundAutoConnect) {
+        return;
+      }
+      backgroundReconnectTimer = setTimeout(() => {
+        connectEvents({ force: true, log: true, auto: true });
+      }, 250);
+    }
+
+    function connectEvents({ force = false, log = true, auto = true } = {}) {
+      backgroundAutoConnect = auto;
+      const url = backgroundUrl();
+      if (!force && backgroundSource && backgroundTargetUrl === url) {
+        backgroundStateLabel = "connected";
+        els.eventsStatus.textContent = backgroundStateLabel;
+        return;
+      }
+      disconnectEvents(false, { disableAuto: false });
+      backgroundTargetUrl = url;
+      backgroundSource = new EventSource(url);
+      backgroundStateLabel = "connecting";
+      els.eventsStatus.textContent = backgroundStateLabel;
+      if (log) {
+        appendEvent("connect background SSE -> " + url, "warn");
+      }
+
+      backgroundSource.addEventListener("open", () => {
+        if (backgroundStateLabel !== "connected") {
+          backgroundStateLabel = "connected";
+          els.eventsStatus.textContent = backgroundStateLabel;
+          appendEvent("background SSE connected", "ok");
+        }
+      });
+
+      backgroundSource.addEventListener("accepted", (event) => {
+        appendEvent("bg:accepted -> " + event.data, "ok");
+      });
+
+      ["background_message", "cron_message", "heartbeat_message"].forEach((eventName) => {
+        backgroundSource.addEventListener(eventName, (event) => {
+          renderBackgroundPayload(eventName, event.data);
+        });
+      });
+
+      backgroundSource.addEventListener("debug_trace", (event) => {
+        renderDebugTracePayload(event.data);
+      });
+
+      backgroundSource.addEventListener("error", (event) => {
+        const state = backgroundSource ? backgroundSource.readyState : EventSource.CLOSED;
+        if (state === EventSource.CONNECTING) {
+          if (backgroundStateLabel !== "reconnecting") {
+            backgroundStateLabel = "reconnecting";
+            els.eventsStatus.textContent = backgroundStateLabel;
+            appendEvent("background SSE reconnecting / state=" + state, "warn");
+          }
+          return;
+        }
+        const nextLabel = state === EventSource.OPEN ? "connected" : "disconnected";
+        if (backgroundStateLabel !== nextLabel) {
+          backgroundStateLabel = nextLabel;
+          els.eventsStatus.textContent = backgroundStateLabel;
+        }
+        appendEvent("background SSE error / state=" + state, "err");
+      });
+    }
+
+    function disconnectEvents(log = true, { disableAuto = true } = {}) {
+      if (backgroundReconnectTimer) {
+        clearTimeout(backgroundReconnectTimer);
+        backgroundReconnectTimer = null;
+      }
+      if (backgroundSource) {
+        backgroundSource.close();
+        backgroundSource = null;
+      }
+      if (disableAuto) {
+        backgroundAutoConnect = false;
+      }
+      backgroundTargetUrl = "";
+      backgroundStateLabel = "disconnected";
+      els.eventsStatus.textContent = backgroundStateLabel;
+      if (log) {
+        appendEvent("background SSE disconnected", "warn");
+      }
+    }
+
+    async function sendNormal() {
+      cancelActive();
+      resetStatus("normal");
+      if (backgroundAutoConnect) {
+        connectEvents({ force: backgroundTargetUrl !== backgroundUrl(), log: false, auto: true });
+      }
+      appendChatMessage({
+        kind: "user",
+        label: "你",
+        content: els.message.value,
+      });
+      const start = performance.now();
+      try {
+        const response = await fetch(els.baseUrl.value.replace(/\/$/, "") + "/turn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload()),
+        });
+        els.httpStatus.textContent = String(response.status);
+        const json = await response.json();
+        const elapsed = (performance.now() - start) / 1000;
+        els.finishedAt.textContent = ms(elapsed);
+        appendChatMessage({
+          kind: json.ok ? "assistant" : "error",
+          label: json.ok ? "Nanobot" : "错误",
+          content: json.response || json.error || JSON.stringify(json, null, 2),
+        });
+        appendEvent("normal response received in " + ms(elapsed), "ok");
+      } catch (error) {
+        appendChatMessage({
+          kind: "error",
+          label: "错误",
+          content: String(error),
+        });
+        appendEvent(String(error), "err");
+      }
+    }
+
+    async function sendStream() {
+      cancelActive();
+      resetStatus("stream");
+      if (backgroundAutoConnect) {
+        connectEvents({ force: backgroundTargetUrl !== backgroundUrl(), log: false, auto: true });
+      }
+      const start = performance.now();
+      let firstEventAt = null;
+      let firstTextAt = null;
+      let finalText = "";
+      const streamBubbleKey = "assistant-stream-" + Date.now();
+
+      appendChatMessage({
+        kind: "user",
+        label: "你",
+        content: els.message.value,
+      });
+
+      activeController = new AbortController();
+      els.abortStream.disabled = false;
+
+      try {
+        const response = await fetch(els.baseUrl.value.replace(/\/$/, "") + "/turn/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload()),
+          signal: activeController.signal,
+        });
+        els.httpStatus.textContent = String(response.status);
+        if (!response.body) {
+          throw new Error("浏览器不支持 ReadableStream");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let currentEvent = null;
+        let currentData = [];
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const now = (performance.now() - start) / 1000;
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7);
+              if (firstEventAt === null) {
+                firstEventAt = now;
+                els.firstEvent.textContent = ms(firstEventAt);
+              }
+            } else if (line.startsWith("data: ")) {
+              currentData.push(line.slice(6));
+            } else if (line === "") {
+              if (!currentEvent) continue;
+              const body = currentData.join("\n");
+              appendEvent(currentEvent + " @ " + ms(now) + " -> " + body);
+
+              if (currentEvent === "text_delta") {
+                const parsed = JSON.parse(body);
+                finalText += parsed.content || "";
+                upsertChatMessage({
+                  key: streamBubbleKey,
+                  kind: "assistant",
+                  label: "Nanobot",
+                  content: finalText,
+                });
+                if (firstTextAt === null) {
+                  firstTextAt = now;
+                  els.firstText.textContent = ms(firstTextAt);
+                  appendEvent("first token @ " + ms(firstTextAt), "ok");
+                }
+              } else if (currentEvent === "debug_prompt") {
+                const parsed = JSON.parse(body);
+                els.promptOutput.textContent = parsed.content || body;
+              } else if (currentEvent === "final") {
+                const parsed = JSON.parse(body);
+                upsertChatMessage({
+                  key: streamBubbleKey,
+                  kind: "assistant",
+                  label: "Nanobot",
+                  content: finalText || parsed.response || JSON.stringify(parsed, null, 2),
+                });
+                els.finishedAt.textContent = ms(now);
+              } else if (currentEvent === "error") {
+                appendChatMessage({
+                  kind: "error",
+                  label: "错误",
+                  content: body,
+                });
+              }
+
+              currentEvent = null;
+              currentData = [];
+            }
+          }
+        }
+      } catch (error) {
+        appendEvent(String(error), error.name === "AbortError" ? "warn" : "err");
+      } finally {
+        activeController = null;
+        els.abortStream.disabled = true;
+      }
+    }
+
+    function cancelActive() {
+      if (activeController) {
+        activeController.abort();
+        activeController = null;
+      }
+      els.abortStream.disabled = true;
+    }
+
+    els.sendNormal.addEventListener("click", sendNormal);
+    els.sendStream.addEventListener("click", sendStream);
+    els.connectEvents.addEventListener("click", () => connectEvents({ force: true, log: true, auto: true }));
+    els.disconnectEvents.addEventListener("click", () => disconnectEvents(true, { disableAuto: true }));
+    els.abortStream.addEventListener("click", cancelActive);
+    els.clear.addEventListener("click", () => {
+      cancelActive();
+      resetStatus("-");
+      if (backgroundAutoConnect) {
+        connectEvents({ force: backgroundTargetUrl !== backgroundUrl(), log: false, auto: true });
+      }
+    });
+    [els.baseUrl, els.tenantKey, els.sessionKey, els.conversationId].forEach((el) => {
+      el.addEventListener("change", scheduleBackgroundReconnect);
+    });
+    connectEvents({ force: true, log: false, auto: true });
+  </script>
+</body>
+</html>
