@@ -139,3 +139,29 @@ def test_sync_workspace_templates_skips_heartbeat_markdown(tmp_path) -> None:
 
     assert not (workspace / "HEARTBEAT.md").exists()
     assert not (workspace / "base" / "HEARTBEAT.md").exists()
+
+
+def test_system_prompt_puts_stable_sections_before_summary_and_memory(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+
+    builder._get_identity = lambda: "# Identity"  # type: ignore[method-assign]
+    builder._load_bootstrap_files = lambda: "# Bootstrap"  # type: ignore[method-assign]
+    builder._compact_session_summary = lambda metadata: ("summary block", {})  # type: ignore[method-assign]
+    builder._compact_memory_context = lambda memory: ("memory block", {})  # type: ignore[method-assign]
+    builder.memory.get_memory_context = lambda: "raw memory"  # type: ignore[method-assign]
+    builder.skills.get_always_skills = lambda: ["always-skill"]  # type: ignore[method-assign]
+    builder.skills.load_skills_for_context = lambda names: "always skill body"  # type: ignore[method-assign]
+    builder.skills.build_skills_summary = lambda: "- `skill-a`: desc"  # type: ignore[method-assign]
+
+    prompt = builder.build_system_prompt(extra_sections=["# Extra"], session_metadata={"rolling_summary": "x"})
+
+    identity_idx = prompt.index("# Identity")
+    bootstrap_idx = prompt.index("# Bootstrap")
+    active_idx = prompt.index("# Active Skills")
+    skills_idx = prompt.index("# Skills")
+    summary_idx = prompt.index("# Session Summary")
+    memory_idx = prompt.index("# Memory")
+    extra_idx = prompt.index("# Extra")
+
+    assert identity_idx < bootstrap_idx < active_idx < skills_idx < summary_idx < memory_idx < extra_idx

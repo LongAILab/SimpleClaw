@@ -189,16 +189,6 @@ class ContextBuilder:
         if bootstrap:
             parts.append(bootstrap)
 
-        session_summary, _ = self._compact_session_summary(session_metadata)
-        if session_summary:
-            parts.append(f"# Session Summary\n\n{session_summary}")
-
-        memory = self.memory.get_memory_context()
-        if memory:
-            compact_memory, _ = self._compact_memory_context(memory)
-            if compact_memory:
-                parts.append(f"# Memory\n\n{compact_memory}")
-
         always_skills = self.skills.get_always_skills()
         if always_skills:
             always_content = self.skills.load_skills_for_context(always_skills)
@@ -212,6 +202,16 @@ class ContextBuilder:
 Use these only when they meaningfully improve the result. Read a skill file only when needed.
 
 {skills_summary}""")
+
+        session_summary, _ = self._compact_session_summary(session_metadata)
+        if session_summary:
+            parts.append(f"# Session Summary\n\n{session_summary}")
+
+        memory = self.memory.get_memory_context()
+        if memory:
+            compact_memory, _ = self._compact_memory_context(memory)
+            if compact_memory:
+                parts.append(f"# Memory\n\n{compact_memory}")
 
         if extra_sections:
             parts.extend(section for section in extra_sections if section)
