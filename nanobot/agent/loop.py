@@ -73,7 +73,7 @@ class AgentLoop:
         web_proxy: str | None = None,
         exec_config: ExecToolConfig | None = None,
         cron_service: CronService | None = None,
-        cron_deliver_default: bool = False,
+        cron_deliver_default: bool = True,
         cron_execution_policy_default: CronExecutionPolicy = "isolated-per-job",
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,

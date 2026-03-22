@@ -241,9 +241,10 @@ class AgentDefaults(Base):
     context_window_tokens: int = 65_536
     temperature: float = 0.1
     max_tool_iterations: int = 40
+    thinking: bool | None = False  # Explicit thinking toggle for providers that support it
     # Deprecated compatibility field: accepted from old configs but ignored at runtime.
     memory_window: int | None = Field(default=None, exclude=True)
-    reasoning_effort: str | None = None  # low / medium / high — enables LLM thinking mode
+    reasoning_effort: str | None = None  # low / medium / high for providers with reasoning effort knobs
 
     @property
     def should_warn_deprecated_memory_window(self) -> bool:
@@ -264,9 +265,10 @@ class CronAgentConfig(Base):
     context_window_tokens: int | None = None
     temperature: float | None = None
     max_tool_iterations: int | None = None
+    thinking: bool | None = None
     reasoning_effort: str | None = None
     execution_policy: CronExecutionPolicy = "isolated-per-job"
-    deliver_default: bool = False
+    deliver_default: bool = True
 
     def resolve(self, defaults: AgentDefaults) -> AgentDefaults:
         """Resolve cron settings by falling back to the main agent defaults."""
@@ -286,6 +288,7 @@ class CronAgentConfig(Base):
                 if self.max_tool_iterations is not None
                 else defaults.max_tool_iterations
             ),
+            thinking=self.thinking if self.thinking is not None else defaults.thinking,
             reasoning_effort=(
                 self.reasoning_effort
                 if self.reasoning_effort is not None
@@ -304,6 +307,7 @@ class HeartbeatAgentConfig(Base):
     context_window_tokens: int | None = None
     temperature: float | None = None
     max_tool_iterations: int | None = None
+    thinking: bool | None = None
     reasoning_effort: str | None = None
 
     def resolve(self, defaults: AgentDefaults) -> AgentDefaults:
@@ -324,6 +328,7 @@ class HeartbeatAgentConfig(Base):
                 if self.max_tool_iterations is not None
                 else defaults.max_tool_iterations
             ),
+            thinking=self.thinking if self.thinking is not None else defaults.thinking,
             reasoning_effort=(
                 self.reasoning_effort
                 if self.reasoning_effort is not None
@@ -342,6 +347,7 @@ class PostprocessAgentConfig(Base):
     context_window_tokens: int | None = None
     temperature: float | None = None
     max_tool_iterations: int | None = None
+    thinking: bool | None = None
     reasoning_effort: str | None = None
 
     def resolve(self, defaults: AgentDefaults) -> AgentDefaults:
@@ -362,6 +368,7 @@ class PostprocessAgentConfig(Base):
                 if self.max_tool_iterations is not None
                 else defaults.max_tool_iterations
             ),
+            thinking=self.thinking if self.thinking is not None else defaults.thinking,
             reasoning_effort=(
                 self.reasoning_effort
                 if self.reasoning_effort is not None

@@ -161,6 +161,32 @@ class LiteLLMProvider(LLMProvider):
                     kwargs.update(overrides)
                     return
 
+    def _apply_provider_request_overrides(
+        self,
+        original_model: str,
+        resolved_model: str,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Inject provider-specific request flags after generic overrides."""
+        spec = find_by_model(original_model) or find_by_model(resolved_model)
+        if (
+            spec is not None
+            and spec.name == "moonshot"
+            and "kimi-k2.5" in resolved_model.lower()
+            and self._gateway is None
+        ):
+            thinking = self.generation.thinking
+            if thinking is not True:
+                # Moonshot's official Kimi-K2.5 API defaults to thinking mode.
+                # Disable it explicitly unless config opts back in. Instant mode
+                # also requires temperature=0.6 on Moonshot's official API.
+                extra_body = kwargs.get("extra_body")
+                if not isinstance(extra_body, dict):
+                    extra_body = {}
+                extra_body["thinking"] = {"type": "disabled"}
+                kwargs["extra_body"] = extra_body
+                kwargs["temperature"] = 0.6
+
     @staticmethod
     def _extra_msg_keys(original_model: str, resolved_model: str) -> frozenset[str]:
         """Return provider-specific extra keys to preserve in request messages."""
@@ -251,6 +277,7 @@ class LiteLLMProvider(LLMProvider):
 
         # Apply model-specific overrides (e.g. kimi-k2.5 temperature)
         self._apply_model_overrides(model, kwargs)
+        self._apply_provider_request_overrides(original_model, model, kwargs)
 
         if self._langsmith_enabled:
             kwargs.setdefault("callbacks", []).append("langsmith")
@@ -312,6 +339,7 @@ class LiteLLMProvider(LLMProvider):
             "stream": True,
         }
         self._apply_model_overrides(model, kwargs)
+        self._apply_provider_request_overrides(original_model, model, kwargs)
 
         if self._langsmith_enabled:
             kwargs.setdefault("callbacks", []).append("langsmith")

@@ -71,6 +71,7 @@ class GenerationSettings:
 
     temperature: float = 0.7
     max_tokens: int = 4096
+    thinking: bool | None = None
     reasoning_effort: str | None = None
 
 

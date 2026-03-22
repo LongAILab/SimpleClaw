@@ -107,6 +107,11 @@ class TurnProcessor:
         allowed_dir = runtime.workspace if self._restrict_to_workspace else None
         outbound_metadata = self._get_outbound_message_metadata(metadata)
         outbound_session_key = self._get_outbound_session_key(metadata, session_key)
+        action_session_key = session_key
+        if metadata:
+            origin_session_key = metadata.get("_origin_session_key")
+            if isinstance(origin_session_key, str) and origin_session_key.strip():
+                action_session_key = origin_session_key.strip()
         for name in ("read_file", "write_file", "edit_file", "list_dir"):
             if tool := self._tools.get(name):
                 if hasattr(tool, "set_context"):
@@ -138,7 +143,7 @@ class TurnProcessor:
                         tool.set_context(
                             channel,
                             chat_id,
-                            session_key=session_key,
+                            session_key=action_session_key,
                             tenant_key=tenant_key,
                         )
 

@@ -65,6 +65,7 @@ async def test_wrappers_execute_full_cron_lifecycle(cron_backend) -> None:
     jobs = service.list_jobs()
     assert len(jobs) == 1
     assert jobs[0].schedule.kind == "every"
+    assert jobs[0].payload.deliver is True
 
     list_result = await registry.execute("cron_list", {})
     assert "Scheduled jobs:" in list_result

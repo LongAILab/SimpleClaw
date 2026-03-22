@@ -88,6 +88,7 @@ def make_provider(
     provider.generation = GenerationSettings(
         temperature=resolved.temperature,
         max_tokens=resolved.max_tokens,
+        thinking=resolved.thinking,
         reasoning_effort=resolved.reasoning_effort,
     )
     return provider
