@@ -55,6 +55,7 @@ class SkillsLoader:
         filter_unavailable: bool = True,
         *,
         include_builtin: bool = False,
+        source_filter: str | None = None,
     ) -> list[dict[str, str]]:
         """
         List all available skills.
@@ -66,15 +67,19 @@ class SkillsLoader:
             List of skill info dicts with 'name', 'path', 'source'.
         """
         skills = []
+        seen_names: set[str] = set()
 
         locations = self._skill_locations() if include_builtin else self._prompt_skill_locations()
         for source, root in locations:
             if not root.exists():
                 continue
-            for skill_dir in root.iterdir():
+            for skill_dir in sorted(root.iterdir(), key=lambda path: path.name):
                 if skill_dir.is_dir():
                     skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists() and not any(s["name"] == skill_dir.name for s in skills):
+                    if not skill_file.exists() or skill_dir.name in seen_names:
+                        continue
+                    seen_names.add(skill_dir.name)
+                    if source_filter is None or source == source_filter:
                         skills.append({"name": skill_dir.name, "path": str(skill_file), "source": source})
 
         # Filter by requirements
@@ -119,7 +124,7 @@ class SkillsLoader:
 
         return "\n\n---\n\n".join(parts) if parts else ""
 
-    def build_skills_summary(self) -> str:
+    def build_skills_summary(self, source_filter: str | None = None) -> str:
         """
         Build a concise summary of prompt-visible skills.
 
@@ -129,11 +134,11 @@ class SkillsLoader:
         Returns:
             Markdown bullet list.
         """
-        all_skills = self.list_skills(filter_unavailable=False)
+        all_skills = self.list_skills(filter_unavailable=False, source_filter=source_filter)
         if not all_skills:
             return ""
 
-        always_skills = set(self.get_always_skills())
+        always_skills = set(self.get_always_skills(source_filter=source_filter))
         lines = []
         for s in all_skills:
             name = s["name"]
@@ -209,10 +214,10 @@ class SkillsLoader:
         meta = self.get_skill_metadata(name) or {}
         return self._parse_nanobot_metadata(meta.get("metadata", ""))
 
-    def get_always_skills(self) -> list[str]:
+    def get_always_skills(self, source_filter: str | None = None) -> list[str]:
         """Get skills marked as always=true that meet requirements."""
         result = []
-        for s in self.list_skills(filter_unavailable=True):
+        for s in self.list_skills(filter_unavailable=True, source_filter=source_filter):
             meta = self.get_skill_metadata(s["name"]) or {}
             skill_meta = self._parse_nanobot_metadata(meta.get("metadata", ""))
             if skill_meta.get("always") or meta.get("always"):

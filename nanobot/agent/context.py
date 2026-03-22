@@ -182,26 +182,29 @@ class ContextBuilder:
         extra_sections: list[str] | None = None,
         session_metadata: dict[str, Any] | None = None,
     ) -> str:
-        """Build the system prompt from identity, bootstrap files, memory, and skills."""
+        """Build the system prompt from stable shared defaults, tenant state, and volatile context."""
         parts = [self._get_identity()]
 
-        bootstrap = self._load_bootstrap_files()
-        if bootstrap:
-            parts.append(bootstrap)
+        shared_bootstrap, tenant_bootstrap = self._load_bootstrap_layers()
+        if shared_bootstrap:
+            parts.append(f"# Shared Base\n\n{shared_bootstrap}")
 
-        always_skills = self.skills.get_always_skills()
-        if always_skills:
-            always_content = self.skills.load_skills_for_context(always_skills)
-            if always_content:
-                parts.append(f"# Active Skills\n\n{always_content}")
+        shared_skills = self._build_skill_layer(
+            layer_name="Shared Skills",
+            source_filter="shared",
+        )
+        if shared_skills:
+            parts.append(shared_skills)
 
-        skills_summary = self.skills.build_skills_summary()
-        if skills_summary:
-            parts.append(f"""# Skills
+        if tenant_bootstrap:
+            parts.append(f"# Tenant Overrides\n\n{tenant_bootstrap}")
 
-Use these only when they meaningfully improve the result. Read a skill file only when needed.
-
-{skills_summary}""")
+        tenant_skills = self._build_skill_layer(
+            layer_name="Tenant Skills",
+            source_filter="workspace",
+        )
+        if tenant_skills:
+            parts.append(tenant_skills)
 
         session_summary, _ = self._compact_session_summary(session_metadata)
         if session_summary:
@@ -217,6 +220,29 @@ Use these only when they meaningfully improve the result. Read a skill file only
             parts.extend(section for section in extra_sections if section)
 
         return "\n\n---\n\n".join(parts)
+
+    def _build_skill_layer(self, *, layer_name: str, source_filter: str) -> str:
+        """Build a prompt block for one skill layer."""
+        sections: list[str] = []
+
+        always_skills = self.skills.get_always_skills(source_filter=source_filter)
+        if always_skills:
+            always_content = self.skills.load_skills_for_context(always_skills)
+            if always_content:
+                sections.append(f"## Active Skills\n\n{always_content}")
+
+        skills_summary = self.skills.build_skills_summary(source_filter=source_filter)
+        if skills_summary:
+            sections.append(
+                "## Available Skills\n\n"
+                "Use these only when they meaningfully improve the result. "
+                "Read a skill file only when needed.\n\n"
+                f"{skills_summary}"
+            )
+
+        if not sections:
+            return ""
+        return f"# {layer_name}\n\n" + "\n\n".join(sections)
 
     def _get_identity(self) -> str:
         """Get the core identity section."""
@@ -258,18 +284,19 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
             lines += [f"Channel: {channel}", f"Chat ID: {chat_id}"]
         return ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" + "\n".join(lines)
 
-    def _load_bootstrap_files(self) -> str:
-        """Load shared base files first, then tenant/default overrides."""
-        parts = []
+    def _load_bootstrap_layers(self) -> tuple[str, str]:
+        """Load shared base files separately from tenant overrides for cache-friendly ordering."""
+        shared_parts: list[str] = []
+        tenant_parts: list[str] = []
 
         for filename in self.BOOTSTRAP_FILES:
-            sections: list[str] = []
             shared_content: str | None = None
             if self.shared_workspace is not None:
                 shared_file = self.shared_workspace / filename
                 if shared_file.exists():
                     shared_content = shared_file.read_text(encoding="utf-8")
-                    sections.append(f"### Shared Base\n\n{shared_content}")
+                    if shared_content.strip():
+                        shared_parts.append(f"## {filename}\n\n{shared_content}")
 
             db_content: str | None = None
             doc_type = self._DOC_TYPE_MAP.get(filename)
@@ -279,20 +306,17 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
             legacy_file = self.workspace / filename
             if db_content is not None and db_content.strip():
                 if db_content != shared_content:
-                    sections.append(f"### Tenant Override\n\n{db_content}")
+                    tenant_parts.append(f"## {filename}\n\n{db_content}")
             elif self.document_store is None and override_file.exists():
                 content = override_file.read_text(encoding="utf-8")
                 if content != shared_content:
-                    sections.append(f"### Tenant Override\n\n{content}")
+                    tenant_parts.append(f"## {filename}\n\n{content}")
             elif self.document_store is None and legacy_file.exists():
                 content = legacy_file.read_text(encoding="utf-8")
                 if content != shared_content:
-                    sections.append(f"### Workspace Override\n\n{content}")
+                    tenant_parts.append(f"## {filename}\n\n{content}")
 
-            if sections:
-                parts.append(f"## {filename}\n\n" + "\n\n".join(sections))
-
-        return "\n\n".join(parts) if parts else ""
+        return "\n\n".join(shared_parts), "\n\n".join(tenant_parts)
 
     def build_messages(
         self,

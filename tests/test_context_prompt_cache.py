@@ -89,6 +89,8 @@ def test_tenant_prompt_uses_shared_base_and_tenant_override(tmp_path) -> None:
 
     assert "Base rule" in prompt
     assert "Tenant rule" in prompt
+    assert prompt.index("# Shared Base") < prompt.index("# Tenant Overrides")
+    assert prompt.index("Base rule") < prompt.index("Tenant rule")
 
 
 def test_legacy_tenant_workspace_files_still_work_with_shared_base(tmp_path) -> None:
@@ -127,10 +129,16 @@ def test_skills_loader_prefers_tenant_then_shared_then_builtin(tmp_path) -> None
 
     loader = SkillsLoader(tenant_workspace)
     summary = loader.build_skills_summary()
+    workspace_summary = loader.build_skills_summary(source_filter="workspace")
+    shared_summary = loader.build_skills_summary(source_filter="shared")
 
     assert loader.load_skill("shadowed") == "tenant shadowed body"
     assert loader.load_skill("shared-only") == "shared skill body"
     assert "shared-only" in summary
+    assert "shadowed" in workspace_summary
+    assert "shared-only" not in workspace_summary
+    assert "shared-only" in shared_summary
+    assert "shadowed" not in shared_summary
 
 
 def test_sync_workspace_templates_skips_heartbeat_markdown(tmp_path) -> None:
@@ -146,22 +154,23 @@ def test_system_prompt_puts_stable_sections_before_summary_and_memory(tmp_path) 
     builder = ContextBuilder(workspace)
 
     builder._get_identity = lambda: "# Identity"  # type: ignore[method-assign]
-    builder._load_bootstrap_files = lambda: "# Bootstrap"  # type: ignore[method-assign]
+    builder._load_bootstrap_layers = lambda: ("## AGENTS.md\n\n# Shared Bootstrap", "## USER.md\n\n# Tenant Bootstrap")  # type: ignore[method-assign]
     builder._compact_session_summary = lambda metadata: ("summary block", {})  # type: ignore[method-assign]
     builder._compact_memory_context = lambda memory: ("memory block", {})  # type: ignore[method-assign]
     builder.memory.get_memory_context = lambda: "raw memory"  # type: ignore[method-assign]
-    builder.skills.get_always_skills = lambda: ["always-skill"]  # type: ignore[method-assign]
+    builder.skills.get_always_skills = lambda source_filter=None: ["always-skill"] if source_filter else []  # type: ignore[method-assign]
     builder.skills.load_skills_for_context = lambda names: "always skill body"  # type: ignore[method-assign]
-    builder.skills.build_skills_summary = lambda: "- `skill-a`: desc"  # type: ignore[method-assign]
+    builder.skills.build_skills_summary = lambda source_filter=None: "- `skill-a`: desc" if source_filter else ""  # type: ignore[method-assign]
 
     prompt = builder.build_system_prompt(extra_sections=["# Extra"], session_metadata={"rolling_summary": "x"})
 
     identity_idx = prompt.index("# Identity")
-    bootstrap_idx = prompt.index("# Bootstrap")
-    active_idx = prompt.index("# Active Skills")
-    skills_idx = prompt.index("# Skills")
+    shared_base_idx = prompt.index("# Shared Base")
+    shared_skills_idx = prompt.index("# Shared Skills")
+    tenant_override_idx = prompt.index("# Tenant Overrides")
+    tenant_skills_idx = prompt.index("# Tenant Skills")
     summary_idx = prompt.index("# Session Summary")
     memory_idx = prompt.index("# Memory")
     extra_idx = prompt.index("# Extra")
 
-    assert identity_idx < bootstrap_idx < active_idx < skills_idx < summary_idx < memory_idx < extra_idx
+    assert identity_idx < shared_base_idx < shared_skills_idx < tenant_override_idx < tenant_skills_idx < summary_idx < memory_idx < extra_idx
