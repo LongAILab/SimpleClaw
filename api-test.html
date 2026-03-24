@@ -155,6 +155,94 @@
       line-height: 1.5;
     }
 
+    .prompt-view {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      white-space: normal;
+    }
+
+    .prompt-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .prompt-section {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .prompt-section.cached {
+      border-color: rgba(94, 234, 212, 0.45);
+      background: linear-gradient(180deg, rgba(94, 234, 212, 0.12), rgba(94, 234, 212, 0.04));
+    }
+
+    .prompt-section.dynamic {
+      border-color: rgba(251, 191, 36, 0.42);
+      background: linear-gradient(180deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.04));
+    }
+
+    .prompt-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .prompt-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #081121;
+      background: var(--accent);
+    }
+
+    .prompt-badge.cached {
+      background: var(--accent-2);
+    }
+
+    .prompt-badge.dynamic {
+      background: #fbbf24;
+    }
+
+    .prompt-meta {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .prompt-section pre,
+    .prompt-raw pre {
+      margin: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .prompt-raw {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    .prompt-raw summary {
+      cursor: pointer;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
     #finalOutput {
       white-space: normal;
       word-break: break-word;
@@ -243,6 +331,7 @@
     @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
       .fields { grid-template-columns: 1fr; }
+      .prompt-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -378,6 +467,85 @@
       return escapeHtml(content || "").replace(/\r?\n/g, "<br>");
     }
 
+    function renderJsonHtml(value) {
+      return "<pre>" + escapeHtml(JSON.stringify(value || {}, null, 2)) + "</pre>";
+    }
+
+    function renderCodeHtml(value) {
+      return "<pre>" + escapeHtml(value || "(none)") + "</pre>";
+    }
+
+    function renderPromptSection({ title, badge, tone, meta = "", content = "" }) {
+      return [
+        '<section class="prompt-section ' + tone + '">',
+        '  <div class="prompt-title">',
+        '    <span>' + escapeHtml(title) + '</span>',
+        '    <span class="prompt-badge ' + tone + '">' + escapeHtml(badge) + '</span>',
+        '  </div>',
+        meta ? '  <div class="prompt-meta">' + escapeHtml(meta) + '</div>' : "",
+        renderCodeHtml(content),
+        '</section>',
+      ].filter(Boolean).join("\n");
+    }
+
+    function renderPromptSnapshot(payload) {
+      const snapshot = payload && payload.snapshot;
+      if (!snapshot) {
+        els.promptOutput.textContent = (payload && payload.content) || "";
+        return;
+      }
+      const promptState = payload.prompt_state || {};
+      const systemPrompt = promptState.system_prompt || {};
+      const requestMessages = Array.isArray(snapshot.request_messages) ? snapshot.request_messages : [];
+      const requestPreview = requestMessages.map((item) => {
+        return "## Message " + item.index + " [" + item.role + "]\n\n" + (item.content || "");
+      }).join("\n\n");
+      const html = [
+        '<div class="prompt-view">',
+        '  <div class="prompt-meta">绿色部分会进入 prefix cache，黄色部分每轮仍会重新计算。</div>',
+        '  <div class="prompt-grid">',
+        renderPromptSection({
+          title: "Stable Prefix",
+          badge: "进入 Prefix Cache",
+          tone: "cached",
+          meta: "sections: " + (systemPrompt.stable_prefix_sections ?? "-") + " · tokens: " + (systemPrompt.stable_prefix_tokens ?? "-"),
+          content: snapshot.stable_prefix || "",
+        }),
+        renderPromptSection({
+          title: "Stable Tool Schemas",
+          badge: "和前缀一起缓存",
+          tone: "cached",
+          meta: "tool_count: " + (payload.tool_count ?? "-"),
+          content: JSON.stringify(snapshot.tool_schemas || [], null, 2),
+        }),
+        renderPromptSection({
+          title: "Dynamic Tail",
+          badge: "每轮重算",
+          tone: "dynamic",
+          meta: "sections: " + (systemPrompt.dynamic_tail_sections ?? "-") + " · tokens: " + (systemPrompt.dynamic_tail_tokens ?? "-"),
+          content: snapshot.dynamic_tail || "",
+        }),
+        renderPromptSection({
+          title: "Runtime Request Messages",
+          badge: "每轮重算",
+          tone: "dynamic",
+          meta: "message_count: " + (payload.message_count ?? requestMessages.length),
+          content: requestPreview,
+        }),
+        "  </div>",
+        '  <section class="prompt-section">',
+        '    <div class="prompt-title"><span>Prompt Observability</span><span class="prompt-badge">统计</span></div>',
+        renderJsonHtml(promptState),
+        '  </section>',
+        '  <details class="prompt-raw">',
+        '    <summary>查看原始 debug_prompt 文本</summary>',
+        renderCodeHtml(payload.content || ""),
+        '  </details>',
+        '</div>',
+      ].join("\n");
+      els.promptOutput.innerHTML = html;
+    }
+
     function ensureChatMessage(key, kind, label) {
       let row = key ? els.finalOutput.querySelector('[data-key="' + key + '"]') : null;
       if (!row) {
@@ -455,7 +623,7 @@
       els.finishedAt.textContent = "-";
       els.eventsStatus.textContent = backgroundSource ? "connected" : "-";
       els.finalOutput.innerHTML = "";
-      els.promptOutput.textContent = "";
+      els.promptOutput.innerHTML = "";
       els.asyncOutput.textContent = "";
       els.events.textContent = "";
     }
@@ -731,7 +899,7 @@
                 }
               } else if (currentEvent === "debug_prompt") {
                 const parsed = JSON.parse(body);
-                els.promptOutput.textContent = parsed.content || body;
+                renderPromptSnapshot(parsed);
               } else if (currentEvent === "final") {
                 const parsed = JSON.parse(body);
                 upsertChatMessage({

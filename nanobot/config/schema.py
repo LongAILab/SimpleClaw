@@ -242,6 +242,7 @@ class AgentDefaults(Base):
     temperature: float = 0.1
     max_tool_iterations: int = 40
     thinking: bool | None = False  # Explicit thinking toggle for providers that support it
+    responses_prefix_cache: bool = False
     # Deprecated compatibility field: accepted from old configs but ignored at runtime.
     memory_window: int | None = Field(default=None, exclude=True)
     reasoning_effort: str | None = None  # low / medium / high for providers with reasoning effort knobs
@@ -266,6 +267,7 @@ class CronAgentConfig(Base):
     temperature: float | None = None
     max_tool_iterations: int | None = None
     thinking: bool | None = None
+    responses_prefix_cache: bool | None = None
     reasoning_effort: str | None = None
     execution_policy: CronExecutionPolicy = "isolated-per-job"
     deliver_default: bool = True
@@ -289,6 +291,11 @@ class CronAgentConfig(Base):
                 else defaults.max_tool_iterations
             ),
             thinking=self.thinking if self.thinking is not None else defaults.thinking,
+            responses_prefix_cache=(
+                self.responses_prefix_cache
+                if self.responses_prefix_cache is not None
+                else defaults.responses_prefix_cache
+            ),
             reasoning_effort=(
                 self.reasoning_effort
                 if self.reasoning_effort is not None
@@ -308,6 +315,7 @@ class HeartbeatAgentConfig(Base):
     temperature: float | None = None
     max_tool_iterations: int | None = None
     thinking: bool | None = None
+    responses_prefix_cache: bool | None = None
     reasoning_effort: str | None = None
 
     def resolve(self, defaults: AgentDefaults) -> AgentDefaults:
@@ -329,6 +337,11 @@ class HeartbeatAgentConfig(Base):
                 else defaults.max_tool_iterations
             ),
             thinking=self.thinking if self.thinking is not None else defaults.thinking,
+            responses_prefix_cache=(
+                self.responses_prefix_cache
+                if self.responses_prefix_cache is not None
+                else defaults.responses_prefix_cache
+            ),
             reasoning_effort=(
                 self.reasoning_effort
                 if self.reasoning_effort is not None
@@ -348,6 +361,7 @@ class PostprocessAgentConfig(Base):
     temperature: float | None = None
     max_tool_iterations: int | None = None
     thinking: bool | None = None
+    responses_prefix_cache: bool | None = None
     reasoning_effort: str | None = None
 
     def resolve(self, defaults: AgentDefaults) -> AgentDefaults:
@@ -369,6 +383,11 @@ class PostprocessAgentConfig(Base):
                 else defaults.max_tool_iterations
             ),
             thinking=self.thinking if self.thinking is not None else defaults.thinking,
+            responses_prefix_cache=(
+                self.responses_prefix_cache
+                if self.responses_prefix_cache is not None
+                else defaults.responses_prefix_cache
+            ),
             reasoning_effort=(
                 self.reasoning_effort
                 if self.reasoning_effort is not None

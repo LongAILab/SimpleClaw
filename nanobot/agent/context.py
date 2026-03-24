@@ -23,8 +23,16 @@ from nanobot.utils.helpers import build_assistant_message, detect_image_mime, es
 class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
 
-    BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
+    # Files loaded from the shared base workspace (stable, file-backed).
+    SHARED_BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
+    # Tenant-scoped prompt documents stored in MySQL.
+    # These are mutable workspace state and should stay out of the cached prefix.
+    _TENANT_PROMPT_DOC_TYPES: dict[str, str] = {
+        "SOUL.md": "soul",
+        "USER.md": "user",
+    }
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
+    # Legacy map kept for filesystem tool compatibility; not used in prompt assembly.
     _DOC_TYPE_MAP = {
         "SOUL.md": "soul",
         "USER.md": "user",
@@ -183,43 +191,69 @@ class ContextBuilder:
         session_metadata: dict[str, Any] | None = None,
     ) -> str:
         """Build the system prompt from stable shared defaults, tenant state, and volatile context."""
-        parts = [self._get_identity()]
+        return self.build_system_prompt_sections(
+            skill_names=skill_names,
+            extra_sections=extra_sections,
+            session_metadata=session_metadata,
+        )["full_prompt"]
 
-        shared_bootstrap, tenant_bootstrap = self._load_bootstrap_layers()
+    def build_system_prompt_sections(
+        self,
+        skill_names: list[str] | None = None,
+        extra_sections: list[str] | None = None,
+        session_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build cache-friendly stable/dynamic system prompt sections."""
+        del skill_names  # Reserved for future skill selection.
+        stable_parts = [self._get_identity()]
+        dynamic_parts: list[str] = []
+
+        shared_bootstrap, tenant_dynamic_bootstrap = self._load_bootstrap_layers()
         if shared_bootstrap:
-            parts.append(f"# Shared Base\n\n{shared_bootstrap}")
+            stable_parts.append(f"# Shared Base\n\n{shared_bootstrap}")
 
         shared_skills = self._build_skill_layer(
             layer_name="Shared Skills",
             source_filter="shared",
         )
         if shared_skills:
-            parts.append(shared_skills)
+            stable_parts.append(shared_skills)
 
-        if tenant_bootstrap:
-            parts.append(f"# Tenant Overrides\n\n{tenant_bootstrap}")
+        # Tenant-scoped docs and skills are mutable workspace state.
+        # Keep them in the dynamic tail so prefix caching stays stable.
+        if tenant_dynamic_bootstrap:
+            dynamic_parts.append(f"# Tenant Workspace\n\n{tenant_dynamic_bootstrap}")
 
         tenant_skills = self._build_skill_layer(
             layer_name="Tenant Skills",
             source_filter="workspace",
         )
         if tenant_skills:
-            parts.append(tenant_skills)
+            dynamic_parts.append(tenant_skills)
 
         session_summary, _ = self._compact_session_summary(session_metadata)
         if session_summary:
-            parts.append(f"# Session Summary\n\n{session_summary}")
+            dynamic_parts.append(f"# Session Summary\n\n{session_summary}")
 
         memory = self.memory.get_memory_context()
         if memory:
             compact_memory, _ = self._compact_memory_context(memory)
             if compact_memory:
-                parts.append(f"# Memory\n\n{compact_memory}")
+                dynamic_parts.append(f"# Memory\n\n{compact_memory}")
 
         if extra_sections:
-            parts.extend(section for section in extra_sections if section)
+            dynamic_parts.extend(section for section in extra_sections if section)
 
-        return "\n\n---\n\n".join(parts)
+        stable_prompt = "\n\n---\n\n".join(stable_parts)
+        dynamic_prompt = "\n\n---\n\n".join(dynamic_parts)
+        full_parts = stable_parts + dynamic_parts
+        return {
+            "stable_parts": stable_parts,
+            "dynamic_parts": dynamic_parts,
+            "stable_prompt": stable_prompt,
+            "dynamic_prompt": dynamic_prompt,
+            "full_prompt": "\n\n---\n\n".join(full_parts),
+        }
 
     def _build_skill_layer(self, *, layer_name: str, source_filter: str) -> str:
         """Build a prompt block for one skill layer."""
@@ -285,38 +319,37 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         return ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" + "\n".join(lines)
 
     def _load_bootstrap_layers(self) -> tuple[str, str]:
-        """Load shared base files separately from tenant overrides for cache-friendly ordering."""
+        """Load prompt layers split by cache stability.
+
+        Returns:
+            shared_bootstrap: Content from the shared base workspace (stable, file-backed).
+            tenant_dynamic_bootstrap: Mutable tenant prompt docs from MySQL.
+        """
         shared_parts: list[str] = []
-        tenant_parts: list[str] = []
+        tenant_dynamic_parts: list[str] = []
 
-        for filename in self.BOOTSTRAP_FILES:
-            shared_content: str | None = None
-            if self.shared_workspace is not None:
-                shared_file = self.shared_workspace / filename
-                if shared_file.exists():
-                    shared_content = shared_file.read_text(encoding="utf-8")
-                    if shared_content.strip():
-                        shared_parts.append(f"## {filename}\n\n{shared_content}")
+        # Shared base files — always file-backed, stable across all tenants.
+        for filename in self.SHARED_BOOTSTRAP_FILES:
+            if self.shared_workspace is None:
+                continue
+            shared_file = self.shared_workspace / filename
+            if shared_file.exists():
+                content = shared_file.read_text(encoding="utf-8")
+                if content.strip():
+                    shared_parts.append(f"## {filename}\n\n{content}")
 
-            db_content: str | None = None
-            doc_type = self._DOC_TYPE_MAP.get(filename)
-            if self.document_store is not None and doc_type is not None:
-                db_content = self.document_store.get_active_content(self.tenant_key, doc_type, filename)
-            override_file = self.workspace / "overrides" / filename
-            legacy_file = self.workspace / filename
-            if db_content is not None and db_content.strip():
-                if db_content != shared_content:
-                    tenant_parts.append(f"## {filename}\n\n{db_content}")
-            elif self.document_store is None and override_file.exists():
-                content = override_file.read_text(encoding="utf-8")
-                if content != shared_content:
-                    tenant_parts.append(f"## {filename}\n\n{content}")
-            elif self.document_store is None and legacy_file.exists():
-                content = legacy_file.read_text(encoding="utf-8")
-                if content != shared_content:
-                    tenant_parts.append(f"## {filename}\n\n{content}")
+        # Tenant prompt docs — from MySQL, updated over time as workspace state changes.
+        for filename, doc_type in self._TENANT_PROMPT_DOC_TYPES.items():
+            if self.document_store is None:
+                continue
+            db_content = self.document_store.get_active_content(self.tenant_key, doc_type, filename)
+            if db_content and db_content.strip():
+                tenant_dynamic_parts.append(f"## {filename}\n\n{db_content}")
 
-        return "\n\n".join(shared_parts), "\n\n".join(tenant_parts)
+        return (
+            "\n\n".join(shared_parts),
+            "\n\n".join(tenant_dynamic_parts),
+        )
 
     def build_messages(
         self,
@@ -330,6 +363,11 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         session_metadata: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
+        prompt_sections = self.build_system_prompt_sections(
+            skill_names,
+            extra_sections=extra_system_sections,
+            session_metadata=session_metadata,
+        )
         runtime_ctx = self._build_runtime_context(channel, chat_id)
         user_content = self._build_user_content(current_message, media)
 
@@ -343,11 +381,10 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         return [
             {
                 "role": "system",
-                "content": self.build_system_prompt(
-                    skill_names,
-                    extra_sections=extra_system_sections,
-                    session_metadata=session_metadata,
-                ),
+                "content": prompt_sections["full_prompt"],
+                "_cache_stable_prefix": prompt_sections["stable_prompt"],
+                "_cache_dynamic_tail": prompt_sections["dynamic_prompt"],
+                "_cache_tenant_key": self.tenant_key,
             },
             *history,
             {"role": "user", "content": merged},
@@ -361,6 +398,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         session_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Return debug-friendly prompt assembly diagnostics."""
+        prompt_sections = self.build_system_prompt_sections(session_metadata=session_metadata)
         memory_text = self.memory.get_memory_context()
         _, memory_meta = self._compact_memory_context(memory_text)
         _, summary_meta = self._compact_session_summary(session_metadata)
@@ -385,6 +423,20 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
             },
             "session_summary": summary_meta,
             "memory": memory_meta,
+            "system_prompt": {
+                "stable_prefix_sections": len(prompt_sections["stable_parts"]),
+                "dynamic_tail_sections": len(prompt_sections["dynamic_parts"]),
+                "stable_prefix_tokens": (
+                    self._estimate_text_tokens(prompt_sections["stable_prompt"])
+                    if prompt_sections["stable_prompt"]
+                    else 0
+                ),
+                "dynamic_tail_tokens": (
+                    self._estimate_text_tokens(prompt_sections["dynamic_prompt"])
+                    if prompt_sections["dynamic_prompt"]
+                    else 0
+                ),
+            },
         }
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:

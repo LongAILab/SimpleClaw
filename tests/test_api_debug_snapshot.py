@@ -1,10 +1,15 @@
-from nanobot.api.server import _build_turn_timing_payload, _render_prompt_snapshot
+from nanobot.api.server import _build_prompt_snapshot_data, _build_turn_timing_payload, _render_prompt_snapshot
 
 
 def test_render_prompt_snapshot_includes_system_prompt_and_tools() -> None:
     snapshot = _render_prompt_snapshot(
         [
-            {"role": "system", "content": "SYS PROMPT"},
+            {
+                "role": "system",
+                "content": "SYS PROMPT",
+                "_cache_stable_prefix": "STABLE PREFIX",
+                "_cache_dynamic_tail": "DYNAMIC TAIL",
+            },
             {"role": "user", "content": "你好"},
         ],
         [
@@ -22,6 +27,11 @@ def test_render_prompt_snapshot_includes_system_prompt_and_tools() -> None:
         },
     )
 
+    assert "## Prefix Cache View" in snapshot
+    assert "### Stable Prefix [cached via common_prefix]" in snapshot
+    assert "STABLE PREFIX" in snapshot
+    assert "### Dynamic Tail [recomputed every turn]" in snapshot
+    assert "DYNAMIC TAIL" in snapshot
     assert "## Full System Prompt" in snapshot
     assert "SYS PROMPT" in snapshot
     assert "## Tool Schemas" in snapshot
@@ -32,6 +42,28 @@ def test_render_prompt_snapshot_includes_system_prompt_and_tools() -> None:
     assert "(system message shown above)" in snapshot
     assert "## Message 1 [SYSTEM]" not in snapshot
     assert "## Message 2 [USER]" in snapshot
+
+
+def test_build_prompt_snapshot_data_exposes_prefix_split() -> None:
+    payload = _build_prompt_snapshot_data(
+        [
+            {
+                "role": "system",
+                "content": "FULL",
+                "_cache_stable_prefix": "STABLE",
+                "_cache_dynamic_tail": "TAIL",
+            },
+            {"role": "user", "content": "你好"},
+        ],
+        [{"type": "function", "function": {"name": "read_file"}}],
+        {"system_prompt": {"stable_prefix_tokens": 100}},
+    )
+
+    assert payload["full_system_prompt"] == "FULL"
+    assert payload["stable_prefix"] == "STABLE"
+    assert payload["dynamic_tail"] == "TAIL"
+    assert payload["tool_schemas"][0]["function"]["name"] == "read_file"
+    assert payload["request_messages"][0]["role"] == "USER"
 
 
 def test_build_turn_timing_payload_computes_expected_breakdown() -> None:

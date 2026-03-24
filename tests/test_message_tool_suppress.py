@@ -23,6 +23,42 @@ class TestMessageToolSuppressLogic:
     """Final reply suppressed only when message tool sends to the same target."""
 
     @pytest.mark.asyncio
+    async def test_main_lane_hides_message_tool_from_llm(self, tmp_path: Path) -> None:
+        loop = _make_loop(tmp_path)
+        loop.provider.chat_with_retry = AsyncMock(return_value=LLMResponse(content="Hello!", tool_calls=[]))
+
+        msg = InboundMessage(channel="feishu", sender_id="user1", chat_id="chat123", content="Hi")
+        result = await loop._process_message(msg)
+
+        assert result is not None
+        tool_names = {
+            item["function"]["name"]
+            for item in loop.provider.chat_with_retry.await_args.kwargs["tools"]
+        }
+        assert "message" not in tool_names
+
+    @pytest.mark.asyncio
+    async def test_non_main_lane_keeps_message_tool_visible(self, tmp_path: Path) -> None:
+        loop = _make_loop(tmp_path)
+        loop.provider.chat_with_retry = AsyncMock(return_value=LLMResponse(content="Hello!", tool_calls=[]))
+
+        msg = InboundMessage(
+            channel="feishu",
+            sender_id="user1",
+            chat_id="chat123",
+            content="Hi",
+            metadata={"_lane": "heartbeat"},
+        )
+        result = await loop._process_message(msg)
+
+        assert result is not None
+        tool_names = {
+            item["function"]["name"]
+            for item in loop.provider.chat_with_retry.await_args.kwargs["tools"]
+        }
+        assert "message" in tool_names
+
+    @pytest.mark.asyncio
     async def test_suppress_when_sent_to_same_target(self, tmp_path: Path) -> None:
         loop = _make_loop(tmp_path)
         tool_call = ToolCallRequest(
@@ -121,12 +157,12 @@ class TestMessageToolTurnTracking:
     def test_sent_in_turn_tracks_same_target(self) -> None:
         tool = MessageTool()
         tool.set_context("feishu", "chat1")
-        assert not tool._sent_in_turn
-        tool._sent_in_turn = True
-        assert tool._sent_in_turn
+        assert not tool.sent_in_turn()
+        tool._sent_in_turn_ctx.set(True)
+        assert tool.sent_in_turn()
 
     def test_start_turn_resets(self) -> None:
         tool = MessageTool()
-        tool._sent_in_turn = True
+        tool._sent_in_turn_ctx.set(True)
         tool.start_turn()
-        assert not tool._sent_in_turn
+        assert not tool.sent_in_turn()

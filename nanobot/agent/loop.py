@@ -562,6 +562,14 @@ class AgentLoop:
         """Save new-turn messages into session, truncating large tool results."""
         self._turn_processor.save_turn(session, messages, skip)
 
+    def get_last_llm_debug(self) -> list[dict[str, Any]]:
+        """Return provider/cache debug info for the most recent turn."""
+        return self._turn_processor.get_last_llm_debug()
+
+    def get_llm_tool_definitions(self, *, lane: str = "main") -> list[dict[str, Any]]:
+        """Return the tool schemas exposed to the model for one lane."""
+        return self._turn_processor.get_llm_tool_definitions(lane=lane)
+
     async def process_direct(
         self,
         content: str,

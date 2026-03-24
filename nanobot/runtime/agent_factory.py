@@ -45,6 +45,11 @@ def make_provider(
     model = resolved.model
     provider_name = config.get_provider_name(model, provider_override=resolved.provider)
     provider_cfg = config.get_provider(model, provider_override=resolved.provider)
+    use_responses_provider = (
+        provider_name == "volcengine"
+        and resolved.responses_prefix_cache
+        and not isinstance(settings, (CronAgentConfig, HeartbeatAgentConfig, PostprocessAgentConfig))
+    )
 
     if provider_name == "openai_codex" or model.startswith("openai-codex/"):
         provider = OpenAICodexProvider(default_model=model)
@@ -66,6 +71,18 @@ def make_provider(
             api_key=provider_cfg.api_key,
             api_base=provider_cfg.api_base,
             default_model=model,
+        )
+    elif use_responses_provider:
+        from nanobot.providers.volcengine_responses_provider import VolcengineResponsesProvider
+
+        if not provider_cfg or not provider_cfg.api_key:
+            console.print("[red]Error: VolcEngine Responses provider requires api_key.[/red]")
+            raise typer.Exit(1)
+        provider = VolcengineResponsesProvider(
+            api_key=provider_cfg.api_key,
+            api_base=config.get_api_base(model, provider_override=resolved.provider),
+            default_model=model,
+            extra_headers=provider_cfg.extra_headers if provider_cfg else None,
         )
     else:
         from nanobot.providers.litellm_provider import LiteLLMProvider
@@ -116,7 +133,7 @@ def make_agent_loop(
     from nanobot.agent.loop import AgentLoop
 
     resolved = resolve_agent_settings(config, settings)
-    provider = make_provider(config, console, resolved)
+    provider = make_provider(config, console, settings)
     lane_limits = {
         "main": config.gateway.lanes.main,
         "cron": config.gateway.lanes.cron,

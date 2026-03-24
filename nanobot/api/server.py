@@ -135,6 +135,7 @@ def _build_turn_timing_payload(
     llm_request_started_at: float | None = None,
     first_text_delta_at: float | None = None,
     final_response_at: float | None = None,
+    llm_debug: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a compact timing breakdown for one streamed turn."""
 
@@ -176,6 +177,8 @@ def _build_turn_timing_payload(
             final_response_at,
             since=first_text_delta_at,
         )
+    if llm_debug:
+        payload["llm"] = llm_debug
     return payload
 
 
@@ -184,19 +187,38 @@ def _render_prompt_snapshot(
     tool_defs: list[dict[str, Any]] | None = None,
     prompt_state: dict[str, Any] | None = None,
 ) -> str:
+    snapshot = _build_prompt_snapshot_data(messages, tool_defs, prompt_state)
     blocks: list[str] = []
-    system_prompt = ""
-    skip_first_system = bool(messages) and str(messages[0].get("role") or "").lower() == "system"
-    if skip_first_system:
-        system_prompt = _content_to_debug_text(messages[0].get("content"))
+    blocks.append("## Prefix Cache View")
+    blocks.append(
+        "### Stable Prefix [cached via common_prefix]\n"
+        + (snapshot["stable_prefix"] or "(none)")
+    )
+    blocks.append(
+        "### Stable Tool Schemas [cached with prefix]\n"
+        + (
+            json.dumps(snapshot["tool_schemas"], ensure_ascii=False, indent=2)
+            if snapshot["tool_schemas"]
+            else "(none)"
+        )
+    )
+    blocks.append(
+        "### Dynamic Tail [recomputed every turn]\n"
+        + (snapshot["dynamic_tail"] or "(none)")
+    )
+    blocks.append(
+        "### Runtime Request Messages [recomputed every turn]\n"
+        + (snapshot["request_messages_preview"] or "(none)")
+    )
 
+    blocks.append("")
     blocks.append("## Full System Prompt")
-    blocks.append(system_prompt or "(none)")
+    blocks.append(snapshot["full_system_prompt"] or "(none)")
 
     blocks.append("")
     blocks.append("## Tool Schemas")
-    if tool_defs:
-        blocks.append(json.dumps(tool_defs, ensure_ascii=False, indent=2))
+    if snapshot["tool_schemas"]:
+        blocks.append(json.dumps(snapshot["tool_schemas"], ensure_ascii=False, indent=2))
     else:
         blocks.append("(none)")
 
@@ -209,27 +231,73 @@ def _render_prompt_snapshot(
 
     blocks.append("")
     blocks.append("## Request Messages")
-    if skip_first_system:
+    if snapshot["skip_first_system"]:
         blocks.append("(system message shown above)")
+    for item in snapshot["request_messages"]:
+        blocks.append(f"## Message {item['index']} [{item['role']}]")
+        blocks.append(item["content"])
+        if item["tool_calls"]:
+            blocks.append("")
+            blocks.append("### tool_calls")
+            blocks.append(json.dumps(item["tool_calls"], ensure_ascii=False, indent=2))
+        if item["tool_call_id"]:
+            blocks.append("")
+            blocks.append(f"### tool_call_id\n{item['tool_call_id']}")
+    return "\n\n".join(blocks)
+
+
+def _build_prompt_snapshot_data(
+    messages: list[dict[str, Any]],
+    tool_defs: list[dict[str, Any]] | None = None,
+    prompt_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    del prompt_state
+    system_prompt = ""
+    stable_prefix = ""
+    dynamic_tail = ""
+    skip_first_system = bool(messages) and str(messages[0].get("role") or "").lower() == "system"
+    if skip_first_system:
+        system_prompt = _content_to_debug_text(messages[0].get("content"))
+        stable_prefix = _content_to_debug_text(messages[0].get("_cache_stable_prefix"))
+        dynamic_tail = _content_to_debug_text(messages[0].get("_cache_dynamic_tail"))
+    if not stable_prefix:
+        stable_prefix = system_prompt
+
+    if skip_first_system:
         display_messages = messages[1:]
         start_index = 2
     else:
         display_messages = messages
         start_index = 1
+
+    request_messages: list[dict[str, Any]] = []
+    preview_blocks: list[str] = []
     for index, message in enumerate(display_messages, start=start_index):
         role = str(message.get("role") or "unknown").upper()
-        blocks.append(f"## Message {index} [{role}]")
-        blocks.append(_content_to_debug_text(message.get("content")))
+        content = _content_to_debug_text(message.get("content"))
         tool_calls = message.get("tool_calls")
-        if tool_calls:
-            blocks.append("")
-            blocks.append("### tool_calls")
-            blocks.append(json.dumps(tool_calls, ensure_ascii=False, indent=2))
         tool_call_id = message.get("tool_call_id")
-        if tool_call_id:
-            blocks.append("")
-            blocks.append(f"### tool_call_id\n{tool_call_id}")
-    return "\n\n".join(blocks)
+        request_messages.append(
+            {
+                "index": index,
+                "role": role,
+                "content": content,
+                "tool_calls": tool_calls,
+                "tool_call_id": tool_call_id,
+            }
+        )
+        preview_blocks.append(f"## Message {index} [{role}]")
+        preview_blocks.append(content)
+
+    return {
+        "full_system_prompt": system_prompt,
+        "stable_prefix": stable_prefix,
+        "dynamic_tail": dynamic_tail,
+        "tool_schemas": tool_defs or [],
+        "request_messages": request_messages,
+        "request_messages_preview": "\n\n".join(preview_blocks),
+        "skip_first_system": skip_first_system,
+    }
 
 
 def run_api_server(
@@ -428,15 +496,18 @@ def run_api_server_with_runtime(
                         chat_id=conversation_id,
                         session_metadata=session.metadata,
                     )
-                    tool_defs = agent_loop.tools.get_definitions()
+                    tool_defs = agent_loop.get_llm_tool_definitions(lane="main")
                     prompt_state = runtime.context.describe_prompt_state(
                         history=history,
                         raw_history=raw_history,
                         session_metadata=session.metadata,
                     )
+                    snapshot = _build_prompt_snapshot_data(messages, tool_defs, prompt_state)
                     body = JSONResponse(
                         {
                             "content": _render_prompt_snapshot(messages, tool_defs, prompt_state),
+                            "snapshot": snapshot,
+                            "prompt_state": prompt_state,
                             "message_count": len(messages),
                             "tool_count": len(tool_defs),
                         }
@@ -477,6 +548,7 @@ def run_api_server_with_runtime(
                                 llm_request_started_at=llm_request_started_at,
                                 first_text_delta_at=first_text_delta_at,
                                 final_response_at=final_response_at,
+                                llm_debug=agent_loop.get_last_llm_debug(),
                             ),
                         }
                     ).body.decode()

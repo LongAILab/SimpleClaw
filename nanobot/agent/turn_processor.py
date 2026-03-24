@@ -68,6 +68,7 @@ class TurnProcessor:
         self._defer_cron_writes = defer_cron_writes
         self._defer_heartbeat_writes = defer_heartbeat_writes
         self._defer_memory_writes = defer_memory_writes
+        self._last_llm_debug: list[dict[str, Any]] = []
 
     @staticmethod
     def _get_extra_system_sections(metadata: dict[str, Any] | None) -> list[str] | None:
@@ -257,6 +258,36 @@ class TurnProcessor:
                 return True
         return False
 
+    def get_last_llm_debug(self) -> list[dict[str, Any]]:
+        """Return debug metadata for provider calls from the most recent turn."""
+        return [dict(item) for item in self._last_llm_debug]
+
+    @staticmethod
+    def excluded_tool_names_for_lane(lane: str) -> set[str] | None:
+        """Return tool names hidden from the model in one execution lane."""
+        return {"message"} if lane == "main" else None
+
+    @staticmethod
+    def _filter_tool_definitions(
+        tool_defs: list[dict[str, Any]],
+        excluded_tool_names: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Remove selected tool schemas before exposing them to the model."""
+        if not excluded_tool_names:
+            return tool_defs
+        return [
+            tool_def
+            for tool_def in tool_defs
+            if str((tool_def.get("function") or {}).get("name") or "") not in excluded_tool_names
+        ]
+
+    def get_llm_tool_definitions(self, *, lane: str = "main") -> list[dict[str, Any]]:
+        """Return the exact tool schemas exposed to the model for one lane."""
+        return self._filter_tool_definitions(
+            self._tools.get_definitions(),
+            excluded_tool_names=self.excluded_tool_names_for_lane(lane),
+        )
+
     async def run_agent_loop(
         self,
         initial_messages: list[dict],
@@ -264,6 +295,7 @@ class TurnProcessor:
         on_progress: Callable[..., Awaitable[None]] | None = None,
         deferred_actions: list[DeferredToolAction] | None = None,
         stream_text: bool = False,
+        excluded_tool_names: set[str] | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop."""
         builder = context_builder or ContextBuilder(self._default_workspace)
@@ -271,11 +303,15 @@ class TurnProcessor:
         iteration = 0
         final_content = None
         tools_used: list[str] = []
+        self._last_llm_debug = []
 
         while iteration < self._max_iterations:
             iteration += 1
 
-            tool_defs = self._tools.get_definitions()
+            tool_defs = self._filter_tool_definitions(
+                self._tools.get_definitions(),
+                excluded_tool_names=excluded_tool_names,
+            )
             response = await self._get_llm_response(
                 messages=messages,
                 tool_defs=tool_defs,
@@ -353,11 +389,20 @@ class TurnProcessor:
     ) -> LLMResponse:
         """Get one LLM response, optionally streaming text deltas."""
         if not stream_text or on_progress is None:
-            return await self._provider.chat_with_retry(
+            response = await self._provider.chat_with_retry(
                 messages=messages,
                 tools=tool_defs,
                 model=self._model,
             )
+            self._last_llm_debug.append(
+                {
+                    "model": self._model,
+                    "finish_reason": response.finish_reason,
+                    "tool_call_count": len(response.tool_calls),
+                    "usage": dict(response.usage or {}),
+                }
+            )
+            return response
 
         final_response: LLMResponse | None = None
         async for event in self._provider.stream_chat_with_retry(
@@ -375,6 +420,14 @@ class TurnProcessor:
                 content="Error calling LLM: stream returned no final response",
                 finish_reason="error",
             )
+        self._last_llm_debug.append(
+            {
+                "model": self._model,
+                "finish_reason": final_response.finish_reason,
+                "tool_call_count": len(final_response.tool_calls),
+                "usage": dict(final_response.usage or {}),
+            }
+        )
         return final_response
 
     async def dispatch(
@@ -546,6 +599,7 @@ class TurnProcessor:
             session_metadata=session.metadata,
         )
         deferred_actions: list[DeferredToolAction] = []
+        excluded_tool_names = self.excluded_tool_names_for_lane(msg.lane)
 
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
             meta = dict(msg.metadata or {})
@@ -564,6 +618,7 @@ class TurnProcessor:
             on_progress=on_progress or _bus_progress,
             deferred_actions=deferred_actions,
             stream_text=bool(msg.metadata.get("_stream_text")),
+            excluded_tool_names=excluded_tool_names,
         )
 
         if final_content is None:
