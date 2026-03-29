@@ -624,7 +624,7 @@ class AgentLoop:
             return response.content if response else ""
         finally:
             await self._release_session_ownership(msg.routing_key)
-
+    ##心跳机制的决策入口
     async def decide_heartbeat(
         self,
         heartbeat_content: str,

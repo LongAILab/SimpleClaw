@@ -195,7 +195,8 @@ class DevOrchestrator:
 
     def _spawn(self, args: list[str], *, log_file: Path, env: dict[str, str] | None = None) -> int:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        handle = log_file.open("a", encoding="utf-8")
+        # Reset stale dev logs on each fresh service start.
+        handle = log_file.open("w", encoding="utf-8")
         process = subprocess.Popen(
             args,
             stdout=handle,
@@ -232,7 +233,7 @@ class DevOrchestrator:
             f"--lc-messages-dir={Path(sys.executable).resolve().parent.parent / 'share' / 'mysql'}",
         ]
         result = subprocess.run(args, capture_output=True, text=True, check=False)
-        with (self.logs_dir / "mysql-init.log").open("a", encoding="utf-8") as handle:
+        with (self.logs_dir / "mysql-init.log").open("w", encoding="utf-8") as handle:
             handle.write(result.stdout)
             handle.write(result.stderr)
         if result.returncode != 0:

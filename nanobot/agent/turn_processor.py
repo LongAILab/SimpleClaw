@@ -12,6 +12,7 @@ from loguru import logger
 
 from nanobot.agent.context import ContextBuilder
 from nanobot.agent.postprocess import DeferredToolAction, PostprocessManager
+from nanobot.agent.tool_execution_guard import ToolExecutionContext, ToolExecutionGuard
 from nanobot.agent.turn_commit import save_turn_messages
 from nanobot.agent.turn_effects import schedule_deferred_actions, schedule_structured_memory
 from nanobot.agent.runtime import TenantRuntime
@@ -69,6 +70,10 @@ class TurnProcessor:
         self._defer_heartbeat_writes = defer_heartbeat_writes
         self._defer_memory_writes = defer_memory_writes
         self._last_llm_debug: list[dict[str, Any]] = []
+        self._tool_execution_guard = ToolExecutionGuard(
+            tools=self._tools,
+            prepare_deferred_action=self._prepare_deferred_action,
+        )
 
     @staticmethod
     def _get_extra_system_sections(metadata: dict[str, Any] | None) -> list[str] | None:
@@ -296,6 +301,7 @@ class TurnProcessor:
         deferred_actions: list[DeferredToolAction] | None = None,
         stream_text: bool = False,
         excluded_tool_names: set[str] | None = None,
+        turn_metadata: dict[str, Any] | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop."""
         builder = context_builder or ContextBuilder(self._default_workspace)
@@ -342,18 +348,27 @@ class TurnProcessor:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.info("Tool call: {}({})", tool_call.name, args_str[:200])
-                    deferred = self._prepare_deferred_action(tool_call.name, tool_call.arguments)
-                    if deferred is not None:
-                        if deferred_actions is not None:
-                            deferred_actions.append(deferred)
-                        result = deferred.synthetic_result
-                    else:
-                        result = await self._tools.execute(tool_call.name, tool_call.arguments)
+                    outcome = await self._tool_execution_guard.execute(
+                        ToolExecutionContext(
+                            tool_name=tool_call.name,
+                            params=tool_call.arguments,
+                            deferred_actions=deferred_actions,
+                            iteration=iteration,
+                            turn_metadata=dict(turn_metadata or {}),
+                        )
+                    )
+                    logger.info(
+                        "Tool guard outcome: tool={} action={} ok={} status={}",
+                        outcome.tool_name,
+                        outcome.action,
+                        outcome.ok,
+                        outcome.status,
+                    )
                     messages = builder.add_tool_result(
                         messages,
                         tool_call.id,
                         tool_call.name,
-                        result,
+                        outcome.content,
                     )
             else:
                 clean = self.strip_think(response.content)
@@ -494,6 +509,14 @@ class TurnProcessor:
                 runtime.context,
                 deferred_actions=deferred_actions,
                 stream_text=bool(msg.metadata.get("_stream_text")),
+                turn_metadata={
+                    "tenant_key": tenant_key,
+                    "session_key": key,
+                    "channel": channel,
+                    "chat_id": chat_id,
+                    "lane": msg.lane,
+                    "message_id": msg.metadata.get("message_id"),
+                },
             )
             self.save_turn(session, all_msgs, 1 + len(history))
             self._apply_session_metadata(
@@ -619,6 +642,14 @@ class TurnProcessor:
             deferred_actions=deferred_actions,
             stream_text=bool(msg.metadata.get("_stream_text")),
             excluded_tool_names=excluded_tool_names,
+            turn_metadata={
+                "tenant_key": tenant_key,
+                "session_key": key,
+                "channel": msg.channel,
+                "chat_id": msg.chat_id,
+                "lane": msg.lane,
+                "message_id": msg.metadata.get("message_id"),
+            },
         )
 
         if final_content is None:
