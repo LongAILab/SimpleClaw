@@ -28,13 +28,20 @@ _SAVE_MEMORY_TOOL = [
                         "description": "A paragraph summarizing key events/decisions/topics. "
                         "Start with [YYYY-MM-DD HH:MM]. Include detail useful for grep search.",
                     },
-                    "memory_update": {
-                        "type": "string",
-                        "description": "Full updated long-term memory as markdown. Include all existing "
-                        "facts plus new ones. Return unchanged if nothing new.",
+                    "memory_additions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "New facts to add to long-term memory. Each item is one line "
+                        "(for example '- 肤质：敏感肌'). Only include genuinely new facts not already in memory.",
+                    },
+                    "memory_removals": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Facts to remove from long-term memory because they are outdated or "
+                        "contradicted. Each item must be the exact line to remove. Usually empty.",
                     },
                 },
-                "required": ["history_entry", "memory_update"],
+                "required": ["history_entry", "memory_additions", "memory_removals"],
             },
         },
     }
@@ -51,6 +58,27 @@ _TOOL_CHOICE_ERROR_MARKERS = (
 def _ensure_text(value: Any) -> str:
     """Normalize tool-call payload values to text for file storage."""
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
+def _normalize_text_list(value: Any) -> list[str]:
+    """Normalize one tool payload field into a compact list of non-empty lines."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = item if isinstance(item, str) else str(item or "")
+        stripped = text.strip()
+        if not stripped or stripped in seen:
+            continue
+        seen.add(stripped)
+        normalized.append(stripped)
+    return normalized
 
 
 def _normalize_save_memory_args(args: Any) -> dict[str, Any] | None:
@@ -141,16 +169,63 @@ class MemoryStore:
         return entry
 
     @staticmethod
+    def _content_to_text(content: Any) -> str:
+        """Convert one message content payload into plain text for consolidation."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") == "text" and item.get("text"):
+                    parts.append(str(item["text"]))
+                elif item.get("type") == "image_url":
+                    parts.append("[用户上传了一张图片]")
+            return " ".join(parts)
+        return str(content or "")
+
+    @staticmethod
     def _format_messages(messages: list[dict]) -> str:
         lines = []
         for message in messages:
-            if not message.get("content"):
+            text = MemoryStore._content_to_text(message.get("content")).strip()
+            if not text:
                 continue
             tools = f" [tools: {', '.join(message['tools_used'])}]" if message.get("tools_used") else ""
             lines.append(
-                f"[{message.get('timestamp', '?')[:16]}] {message['role'].upper()}{tools}: {message['content']}"
+                f"[{message.get('timestamp', '?')[:16]}] {message['role'].upper()}{tools}: {text}"
             )
         return "\n".join(lines)
+
+    @staticmethod
+    def _merge_memory_patch(current_memory: str, additions: list[str], removals: list[str]) -> str:
+        """Apply a simple additive/removal patch to MEMORY.md without full overwrite."""
+        updated = current_memory.rstrip()
+        removal_set = {line.strip() for line in removals if line.strip()}
+        if removal_set:
+            kept_lines = [
+                line
+                for line in updated.splitlines()
+                if line.strip() not in removal_set
+            ]
+            updated = "\n".join(kept_lines).rstrip()
+
+        existing_lines = {line.strip() for line in updated.splitlines() if line.strip()}
+        new_lines: list[str] = []
+        for line in additions:
+            stripped = line.strip()
+            if not stripped or stripped in existing_lines:
+                continue
+            existing_lines.add(stripped)
+            new_lines.append(stripped)
+
+        if not new_lines:
+            return updated
+        if not updated:
+            return "\n".join(new_lines)
+        separator = "\n\n" if not updated.endswith("\n") else "\n"
+        return f"{updated}{separator}" + "\n".join(new_lines)
 
     async def consolidate(
         self,
@@ -164,18 +239,25 @@ class MemoryStore:
         self._last_archive_entry = None
 
         current_memory = self.read_long_term()
-        prompt = f"""Process this conversation and call the save_memory tool with your consolidation.
+        prompt = f"""Process this conversation and call the save_memory tool with your consolidation patch.
 
 ## Current Long-term Memory
 {current_memory or "(empty)"}
 
 ## Conversation to Process
-{self._format_messages(messages)}"""
+{self._format_messages(messages)}
+
+Instructions:
+- Return only a concise history_entry plus a memory patch.
+- memory_additions should contain only genuinely new long-term facts, one fact per line.
+- memory_removals should contain exact existing lines that should be removed because they are outdated or contradicted.
+- Do not rewrite the full MEMORY.md contents.
+- If nothing should change in long-term memory, return empty arrays for memory_additions and memory_removals."""
 
         chat_messages = [
             {
                 "role": "system",
-                "content": "You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.",
+                "content": "You are a memory consolidation agent. Call the save_memory tool with a history summary and a minimal memory patch only.",
             },
             {"role": "user", "content": prompt},
         ]
@@ -213,14 +295,19 @@ class MemoryStore:
                 logger.warning("Memory consolidation: unexpected save_memory arguments")
                 return self._fail_or_raw_archive(messages)
 
-            if "history_entry" not in args or "memory_update" not in args:
+            if (
+                "history_entry" not in args
+                or "memory_additions" not in args
+                or "memory_removals" not in args
+            ):
                 logger.warning("Memory consolidation: save_memory payload missing required fields")
                 return self._fail_or_raw_archive(messages)
 
             entry = args["history_entry"]
-            update = args["memory_update"]
+            additions = args["memory_additions"]
+            removals = args["memory_removals"]
 
-            if entry is None or update is None:
+            if entry is None or additions is None or removals is None:
                 logger.warning("Memory consolidation: save_memory payload contains null required fields")
                 return self._fail_or_raw_archive(messages)
 
@@ -231,7 +318,9 @@ class MemoryStore:
 
             self.append_history(entry)
             self._last_archive_entry = entry
-            update = _ensure_text(update)
+            additions_list = _normalize_text_list(additions)
+            removals_list = _normalize_text_list(removals)
+            update = self._merge_memory_patch(current_memory, additions_list, removals_list)
             if update != current_memory:
                 self.write_long_term(update)
 

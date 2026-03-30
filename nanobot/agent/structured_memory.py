@@ -28,25 +28,25 @@ class StructuredMemoryItem:
 
 
 _CATEGORY_MAP: dict[str, tuple[str | None, str | None]] = {
-    "preferred_name": ("User Information", "姓名"),
-    "preferred_address": ("User Information", "称呼"),
-    "assistant_alias": ("User Information", "对我的称呼"),
-    "relationship_preference": ("User Information", "关系设定"),
-    "primary_language": ("User Information", "主要语言"),
-    "timezone": ("User Information", "时区"),
-    "communication_style": ("User Information", "沟通风格"),
-    "response_length_preference": ("User Information", "回复长度"),
-    "skin_type": ("Preferences", "肤质"),
-    "skin_concern": ("Preferences", "主要肤况"),
-    "makeup_style": ("Preferences", "妆容风格"),
-    "product_preference": ("Preferences", "产品偏好"),
-    "ingredient_avoidance": ("Preferences", "成分禁忌"),
-    "stable_beauty_preference": ("Preferences", "长期偏好"),
-    "support_preference": ("Important Notes", "支持偏好"),
-    "decision_style": ("Important Notes", "决策偏好"),
-    "sensitive_topic": ("Important Notes", "敏感话题"),
+    "preferred_name": (None, None),
+    "preferred_address": (None, None),
+    "assistant_alias": (None, None),
+    "relationship_preference": (None, None),
+    "primary_language": (None, None),
+    "timezone": (None, None),
+    "communication_style": (None, None),
+    "response_length_preference": (None, None),
+    "skin_type": (None, None),
+    "skin_concern": (None, None),
+    "makeup_style": (None, None),
+    "product_preference": (None, None),
+    "ingredient_avoidance": (None, None),
+    "stable_beauty_preference": (None, None),
+    "support_preference": (None, None),
+    "decision_style": (None, None),
+    "sensitive_topic": (None, None),
     "stable_constraint": ("Important Notes", "长期约束"),
-    "support_boundary": ("Important Notes", "陪伴边界"),
+    "support_boundary": (None, None),
     "daily_rhythm": ("Project Context", "作息节奏"),
     "long_term_goal": ("Project Context", "长期目标"),
     "recurring_reminder": (None, None),
@@ -72,10 +72,7 @@ _USER_DOC_LABELS: dict[str, str] = {
     "support_preference": "支持偏好",
     "decision_style": "决策偏好",
     "sensitive_topic": "敏感话题",
-    "stable_constraint": "长期约束",
     "support_boundary": "陪伴边界",
-    "daily_rhythm": "作息节奏",
-    "long_term_goal": "长期目标",
 }
 
 _SOUL_DOC_LABELS: dict[str, str] = {
@@ -117,7 +114,7 @@ _SOUL_DOC_SECTION = "## Learned Soul Adjustments"
 _HEARTBEAT_DOC_SECTION = "## Learned Recurring Tasks"
 
 StructuredMemoryRunner = Callable[
-    [TenantRuntime, str, str, str, str, list[dict[str, Any]], bool],
+    [TenantRuntime, str, str, str, str, list[dict[str, Any]], bool, bool],
     Awaitable[None],
 ]
 
@@ -167,6 +164,7 @@ class StructuredMemoryManager:
         assistant_reply: str,
         recent_messages: list[dict[str, Any]],
         debug_trace: bool = False,
+        skip_memory_items: bool = False,
     ) -> None:
         """Queue one stable-memory extraction task."""
         if not self._enabled:
@@ -183,6 +181,7 @@ class StructuredMemoryManager:
                 assistant_reply=assistant_reply,
                 recent_messages=recent_messages[-self._recent_message_limit :],
                 debug_trace=debug_trace,
+                skip_memory_items=skip_memory_items,
             )
         )
         self._tasks.add(task)
@@ -199,6 +198,7 @@ class StructuredMemoryManager:
         assistant_reply: str,
         recent_messages: list[dict[str, Any]],
         debug_trace: bool,
+        skip_memory_items: bool,
     ) -> None:
         if self._runner is not None:
             await self._runner(
@@ -210,6 +210,7 @@ class StructuredMemoryManager:
                 assistant_reply=assistant_reply,
                 recent_messages=recent_messages,
                 debug_trace=debug_trace,
+                skip_memory_items=skip_memory_items,
             )
             return
         await self.execute(
@@ -218,6 +219,7 @@ class StructuredMemoryManager:
             origin_user_message=origin_user_message,
             assistant_reply=assistant_reply,
             recent_messages=recent_messages,
+            skip_memory_items=skip_memory_items,
         )
 
     async def execute(
@@ -228,6 +230,7 @@ class StructuredMemoryManager:
         origin_user_message: str,
         assistant_reply: str,
         recent_messages: list[dict[str, Any]],
+        skip_memory_items: bool = False,
     ) -> None:
         """Execute one structured-memory extraction immediately."""
         async with self._semaphore:
@@ -240,7 +243,7 @@ class StructuredMemoryManager:
                 )
                 if not items:
                     return
-                changed = self._apply_items(runtime, items)
+                changed = self._apply_items(runtime, items, skip_memory_items=skip_memory_items)
                 if changed:
                     logger.info(
                         "Structured memory updated for {} with {} item(s)",
@@ -385,9 +388,15 @@ class StructuredMemoryManager:
                 rows.append(f"{role}: {text}")
         return "\n".join(rows) if rows else "(none)"
 
-    def _apply_items(self, runtime: TenantRuntime, items: list[StructuredMemoryItem]) -> bool:
+    def _apply_items(
+        self,
+        runtime: TenantRuntime,
+        items: list[StructuredMemoryItem],
+        *,
+        skip_memory_items: bool = False,
+    ) -> bool:
         changed = False
-        if self._apply_memory_items(runtime, items):
+        if not skip_memory_items and self._apply_memory_items(runtime, items):
             changed = True
         if self._apply_document_items(runtime, items):
             changed = True

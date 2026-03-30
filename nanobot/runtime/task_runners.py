@@ -65,6 +65,7 @@ async def execute_structured_memory_task(services: Any, task: TaskEnvelope) -> N
         origin_user_message=str(payload["origin_user_message"]),
         assistant_reply=str(payload["assistant_reply"]),
         recent_messages=list(payload.get("recent_messages") or []),
+        skip_memory_items=bool(payload.get("skip_memory_items")),
     )
     if payload.get("debug_trace") and str(payload.get("channel") or "") == "api":
         await services.emit_debug_trace(

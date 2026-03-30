@@ -54,7 +54,7 @@ def schedule_structured_memory(
     has_explicit_memory_write: bool,
 ) -> None:
     """Queue background structured-memory extraction when enabled."""
-    if manager is None or not manager.enabled or has_explicit_memory_write:
+    if manager is None or not manager.enabled:
         return
     manager.schedule(
         runtime=runtime,
@@ -65,4 +65,5 @@ def schedule_structured_memory(
         assistant_reply=assistant_reply,
         recent_messages=recent_messages,
         debug_trace=debug_trace,
+        skip_memory_items=has_explicit_memory_write,
     )

@@ -161,6 +161,7 @@ class RuntimeServices:
         assistant_reply: str,
         recent_messages: list[dict[str, Any]],
         debug_trace: bool,
+        skip_memory_items: bool = False,
     ) -> None:
         task = TaskEnvelope(
             task_type="structured_memory_extract",
@@ -177,6 +178,7 @@ class RuntimeServices:
                 "assistant_reply": assistant_reply,
                 "recent_messages": recent_messages,
                 "debug_trace": debug_trace,
+                "skip_memory_items": skip_memory_items,
             },
         )
         await self.enqueue_task(task)
