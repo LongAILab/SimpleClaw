@@ -26,6 +26,7 @@ nano.*.save
 .nanobot/
 MagicMock/
 nanobot/
+case/
 .DS_Store
 
 # Private notes
