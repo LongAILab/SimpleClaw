@@ -1,4 +1,4 @@
-from nanobot.api.server import _build_prompt_snapshot_data, _build_turn_timing_payload, _render_prompt_snapshot
+from simpleclaw.api.server import _build_prompt_snapshot_data, _build_turn_timing_payload, _render_prompt_snapshot
 
 
 def test_render_prompt_snapshot_includes_system_prompt_and_tools() -> None:

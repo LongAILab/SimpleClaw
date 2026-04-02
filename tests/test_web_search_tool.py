@@ -3,8 +3,8 @@
 import httpx
 import pytest
 
-from nanobot.agent.tools.web import WebSearchTool
-from nanobot.config.schema import WebSearchConfig
+from simpleclaw.agent.tools.web import WebSearchTool
+from simpleclaw.config.schema import WebSearchConfig
 
 
 def _tool(provider: str = "brave", api_key: str = "", base_url: str = "") -> WebSearchTool:
@@ -73,8 +73,8 @@ async def test_duckduckgo_search(monkeypatch):
         def text(self, query, max_results=5):
             return [{"title": "DDG Result", "href": "https://ddg.example", "body": "From DuckDuckGo"}]
 
-    monkeypatch.setattr("nanobot.agent.tools.web.DDGS", MockDDGS, raising=False)
-    import nanobot.agent.tools.web as web_mod
+    monkeypatch.setattr("simpleclaw.agent.tools.web.DDGS", MockDDGS, raising=False)
+    import simpleclaw.agent.tools.web as web_mod
     monkeypatch.setattr(web_mod, "DDGS", MockDDGS, raising=False)
 
     from ddgs import DDGS

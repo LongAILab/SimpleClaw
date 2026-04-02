@@ -7,9 +7,9 @@ from importlib.resources import files as pkg_files
 from pathlib import Path
 import datetime as datetime_module
 
-from nanobot.agent.context import ContextBuilder
-from nanobot.agent.skills import SkillsLoader
-from nanobot.utils.helpers import sync_tenant_workspace_templates, sync_workspace_templates
+from simpleclaw.agent.context import ContextBuilder
+from simpleclaw.agent.skills import SkillsLoader
+from simpleclaw.utils.helpers import sync_tenant_workspace_templates, sync_workspace_templates
 
 
 class _FakeDatetime(real_datetime):
@@ -27,7 +27,7 @@ def _make_workspace(tmp_path: Path) -> Path:
 
 
 def test_bootstrap_files_are_backed_by_templates() -> None:
-    template_dir = pkg_files("nanobot") / "templates"
+    template_dir = pkg_files("simpleclaw") / "templates"
 
     for filename in ContextBuilder.SHARED_BOOTSTRAP_FILES:
         assert (template_dir / filename).is_file(), f"missing bootstrap template: {filename}"

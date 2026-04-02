@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nanobot API Test</title>
+  <title>SimpleClaw API Test</title>
   <style>
     :root {
       color-scheme: dark;
@@ -337,7 +337,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Nanobot API 测试页</h1>
+    <h1>SimpleClaw API 测试页</h1>
     <p class="sub">直接测试 <code>/turn</code> 和 <code>/turn/stream</code>，观察普通响应和真实流式输出。</p>
 
     <div class="grid">
@@ -808,7 +808,7 @@
         els.finishedAt.textContent = ms(elapsed);
         appendChatMessage({
           kind: json.ok ? "assistant" : "error",
-          label: json.ok ? "Nanobot" : "错误",
+          label: json.ok ? "SimpleClaw" : "错误",
           content: json.response || json.error || JSON.stringify(json, null, 2),
         });
         appendEvent("normal response received in " + ms(elapsed), "ok");
@@ -889,7 +889,7 @@
                 upsertChatMessage({
                   key: streamBubbleKey,
                   kind: "assistant",
-                  label: "Nanobot",
+                  label: "SimpleClaw",
                   content: finalText,
                 });
                 if (firstTextAt === null) {
@@ -905,7 +905,7 @@
                 upsertChatMessage({
                   key: streamBubbleKey,
                   kind: "assistant",
-                  label: "Nanobot",
+                  label: "SimpleClaw",
                   content: finalText || parsed.response || JSON.stringify(parsed, null, 2),
                 });
                 els.finishedAt.textContent = ms(now);

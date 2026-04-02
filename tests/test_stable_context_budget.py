@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.agent.context import ContextBuilder
-from nanobot.agent.context_budget import derive_context_budget_tokens
-from nanobot.agent.memory import MemoryConsolidator
-from nanobot.session.manager import Session, SessionManager
+from simpleclaw.agent.context import ContextBuilder
+from simpleclaw.agent.context_budget import derive_context_budget_tokens
+from simpleclaw.agent.memory import MemoryConsolidator
+from simpleclaw.session.manager import Session, SessionManager
 
 
 class _MemoryRepo:

@@ -1,4 +1,4 @@
-from nanobot.agent.turn_processor import TurnProcessor
+from simpleclaw.agent.turn_processor import TurnProcessor
 
 
 class DummySession:

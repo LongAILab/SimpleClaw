@@ -1,9 +1,9 @@
 import pytest
 
-from nanobot.heartbeat.scheduler import HeartbeatScheduler, HeartbeatTarget
-from nanobot.config.paths import get_tenant_workspace_path
-from nanobot.runtime.leases import LeaseRepository
-from nanobot.tenant.state import TenantStateRepository
+from simpleclaw.heartbeat.scheduler import HeartbeatScheduler, HeartbeatTarget
+from simpleclaw.config.paths import get_tenant_workspace_path
+from simpleclaw.runtime.leases import LeaseRepository
+from simpleclaw.tenant.state import TenantStateRepository
 
 
 @pytest.mark.asyncio

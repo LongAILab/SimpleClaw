@@ -1,10 +1,9 @@
 <div align="center">
-  <img src="nanobot_logo.png" alt="mojing" width="320">
-  <h1>mojing-v3.0</h1>
+  <h1>🐈 simpleclaw</h1>
   <p>面向长期陪伴场景的多租户 AI 助手内核</p>
 </div>
 
-`mojing-v3.0` 是一个基于 `nanobot` 演进而来的定制仓库，当前重点不是“通用聊天机器人”，而是一个更贴近真实产品落地的多租户陪伴式 Agent：
+`simpleclaw` 是一个面向多租户陪伴式 Agent 的框架：
 
 - 以 `SOUL / USER / HEARTBEAT / MEMORY` 为核心上下文层
 - 以 MySQL 为中心存储租户动态数据
@@ -26,15 +25,15 @@
 当前代码的主要分层如下：
 
 1. 入口层  
-   `nanobot/cli`、`nanobot/api` 负责本地命令、HTTP API 与 SSE 调试。
+   `simpleclaw/cli`、`simpleclaw/api` 负责本地命令、HTTP API 与 SSE 调试。
 2. Agent 层  
-   `nanobot/agent` 负责 prompt 构建、turn processing、tool 编排、memory consolidation、structured memory。
+   `simpleclaw/agent` 负责 prompt 构建、turn processing、tool 编排、memory consolidation、structured memory。
 3. Runtime 层  
-   `nanobot/runtime` 负责多服务装配、任务队列、worker 执行、租户运行时。
+   `simpleclaw/runtime` 负责多服务装配、任务队列、worker 执行、租户运行时。
 4. 业务调度层  
-   `nanobot/cron`、`nanobot/heartbeat` 负责任务触发与调度。
+   `simpleclaw/cron`、`simpleclaw/heartbeat` 负责任务触发与调度。
 5. 存储层  
-   `nanobot/storage`、`nanobot/session`、`nanobot/tenant` 负责 MySQL / Redis / 会话 / 状态持久化。
+   `simpleclaw/storage`、`simpleclaw/session`、`simpleclaw/tenant` 负责 MySQL / Redis / 会话 / 状态持久化。
 
 ## 提示词层次
 主会话 prompt 当前大致按以下顺序装配：
@@ -60,7 +59,7 @@
 - 租户状态
 - cron 任务
 
-目标是把“用户相关的持续状态”放进统一数据层，而不是散落在本地文件夹里。
+目标是把"用户相关的持续状态"放进统一数据层，而不是散落在本地文件夹里。
 
 ## 本地开发环境
 推荐环境：
@@ -72,8 +71,8 @@
 安装依赖：
 
 ```bash
-git clone https://github.com/rao133/mojing-v3.0.git
-cd mojing-v3.0
+git clone <repo-url>
+cd simpleclaw
 pip install -e .[dev]
 ```
 
@@ -86,14 +85,14 @@ pip install -e .
 ## 快速开始
 ### 1. 初始化配置
 ```bash
-nanobot onboard
+sclaw onboard
 ```
 
 默认会生成用户级配置和工作区。  
 如果你想用自定义配置文件，也可以后续通过 `-c /path/to/config.json` 指定。
 
 ### 2. 配置模型与后端
-最少需要配置模型提供方；如果要使用当前仓库的多租户能力，建议同时配置 MySQL 与 Redis。
+最少需要配置模型提供方；如果要使用多租户能力，建议同时配置 MySQL 与 Redis。
 
 示例：
 
@@ -117,7 +116,7 @@ nanobot onboard
       "port": 3306,
       "user": "root",
       "password": "",
-      "database": "nanobot"
+      "database": "simpleclaw"
     },
     "redis": {
       "enabled": true,
@@ -130,27 +129,27 @@ nanobot onboard
 ### 3. 启动方式
 #### 方式 A：直接本地聊天
 ```bash
-nanobot agent
+sclaw agent
 ```
 
 #### 方式 B：启动 HTTP API
 ```bash
-nanobot api --host 127.0.0.1 --port 18790
+sclaw api --host 127.0.0.1 --port 18790
 ```
 
 #### 方式 C：按多服务角色启动
 ```bash
-nanobot serve chat-api
-nanobot serve scheduler-service
-nanobot serve postprocess-worker
-nanobot serve background-worker
+sclaw serve chat-api
+sclaw serve scheduler-service
+sclaw serve postprocess-worker
+sclaw serve background-worker
 ```
 
 #### 方式 D：开发态一键编排
 ```bash
-nanobot dev-up
-nanobot dev-status
-nanobot dev-down
+sclaw dev-up
+sclaw dev-status
+sclaw dev-down
 ```
 
 ## 调试与可观测
@@ -164,31 +163,31 @@ nanobot dev-down
 - `debug_trace`：异步写入、结构化记忆、后台任务日志
 - `debug_timing`：首 token、总耗时、模型等待耗时拆分
 
-如果你在排查“为什么回复慢”，当前推荐优先看：
+如果你在排查"为什么回复慢"，当前推荐优先看：
 
 - `Prompt Observability`
 - `debug_timing`
 
-它们可以把“prompt 过大”与“模型上游波动”区分开。
+它们可以把"prompt 过大"与"模型上游波动"区分开。
 
 ## 常用命令
 ```bash
-nanobot onboard
-nanobot agent
-nanobot api
-nanobot serve chat-api
-nanobot serve scheduler-service
-nanobot serve postprocess-worker
-nanobot serve background-worker
-nanobot dev-up
-nanobot dev-down
-nanobot dev-status
-nanobot migrate-runtime-state
+sclaw onboard
+sclaw agent
+sclaw api
+sclaw serve chat-api
+sclaw serve scheduler-service
+sclaw serve postprocess-worker
+sclaw serve background-worker
+sclaw dev-up
+sclaw dev-down
+sclaw dev-status
+sclaw migrate-runtime-state
 ```
 
 ## 目录说明
 ```text
-nanobot/
+simpleclaw/
 ├── agent/        # prompt、turn、tools、memory、subagent
 ├── api/          # HTTP API 与 SSE 调试输出
 ├── bus/          # 消息总线
@@ -203,21 +202,6 @@ nanobot/
 tests/            # 测试
 bridge/           # 渠道桥接相关资源
 ```
-
-## 当前仓库状态
-这个仓库当前更偏“产品化中的研发仓库”，特点是：
-
-- 架构主线已经比较清楚
-- prompt / memory / runtime / scheduling 都已经落地
-- 调试能力比较强，方便继续打磨
-- 还在持续迭代，并不追求像上游通用框架那样覆盖所有使用场景
-
-如果你想把它继续发展成正式产品仓库，下一步最值得做的是：
-
-- 收敛 README 与文档体系
-- 清理与当前产品无关的资源和示例
-- 明确部署方案与配置模板
-- 做一轮对外发布前的仓库瘦身与命名统一
 
 ## License
 MIT

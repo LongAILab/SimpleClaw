@@ -1,11 +1,11 @@
 [project]
-name = "nanobot-ai"
+name = "simpleclaw"
 version = "0.1.4.post4"
-description = "A lightweight personal AI assistant framework"
+description = "A multi-tenant AI companion agent framework"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "nanobot contributors"}
+    {name = "simpleclaw contributors"}
 ]
 keywords = ["ai", "agent", "chatbot"]
 classifiers = [
@@ -72,7 +72,7 @@ dev = [
 ]
 
 [project.scripts]
-nanobot = "nanobot.cli.commands:app"
+sclaw = "simpleclaw.cli.commands:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -83,24 +83,24 @@ allow-direct-references = true
 
 [tool.hatch.build]
 include = [
-    "nanobot/**/*.py",
-    "nanobot/templates/**/*.md",
-    "nanobot/skills/**/*.md",
-    "nanobot/skills/**/*.sh",
+    "simpleclaw/**/*.py",
+    "simpleclaw/templates/**/*.md",
+    "simpleclaw/skills/**/*.md",
+    "simpleclaw/skills/**/*.sh",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["nanobot"]
+packages = ["simpleclaw"]
 
 [tool.hatch.build.targets.wheel.sources]
-"nanobot" = "nanobot"
+"simpleclaw" = "simpleclaw"
 
 [tool.hatch.build.targets.wheel.force-include]
-"bridge" = "nanobot/bridge"
+"bridge" = "simpleclaw/bridge"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "nanobot/",
+    "simpleclaw/",
     "bridge/",
     "README.md",
     "LICENSE",

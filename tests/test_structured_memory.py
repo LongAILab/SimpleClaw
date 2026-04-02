@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nanobot.agent.structured_memory import StructuredMemoryItem, StructuredMemoryManager
-from nanobot.providers.base import LLMResponse
+from simpleclaw.agent.structured_memory import StructuredMemoryItem, StructuredMemoryManager
+from simpleclaw.providers.base import LLMResponse
 
 
 class DummyMemoryStore:

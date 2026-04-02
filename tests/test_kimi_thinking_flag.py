@@ -1,5 +1,5 @@
-from nanobot.providers.base import GenerationSettings
-from nanobot.providers.litellm_provider import LiteLLMProvider
+from simpleclaw.providers.base import GenerationSettings
+from simpleclaw.providers.litellm_provider import LiteLLMProvider
 
 
 def test_moonshot_kimi_k25_disables_thinking_explicitly() -> None:

@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.channels.telegram import TELEGRAM_REPLY_CONTEXT_MAX_LEN, TelegramChannel
-from nanobot.config.schema import TelegramConfig
+from simpleclaw.bus.events import OutboundMessage
+from simpleclaw.bus.queue import MessageBus
+from simpleclaw.channels.telegram import TELEGRAM_REPLY_CONTEXT_MAX_LEN, TelegramChannel
+from simpleclaw.config.schema import TelegramConfig
 
 
 class _FakeHTTPXRequest:
@@ -143,9 +143,9 @@ async def test_start_uses_request_proxy_without_builder_proxy(monkeypatch) -> No
     app = _FakeApp(lambda: setattr(channel, "_running", False))
     builder = _FakeBuilder(app)
 
-    monkeypatch.setattr("nanobot.channels.telegram.HTTPXRequest", _FakeHTTPXRequest)
+    monkeypatch.setattr("simpleclaw.channels.telegram.HTTPXRequest", _FakeHTTPXRequest)
     monkeypatch.setattr(
-        "nanobot.channels.telegram.Application",
+        "simpleclaw.channels.telegram.Application",
         SimpleNamespace(builder=lambda: builder),
     )
 
@@ -417,7 +417,7 @@ async def test_download_message_media_returns_path_when_download_succeeds(
     media_dir = tmp_path / "media" / "telegram"
     media_dir.mkdir(parents=True)
     monkeypatch.setattr(
-        "nanobot.channels.telegram.get_media_dir",
+        "simpleclaw.channels.telegram.get_media_dir",
         lambda channel=None: media_dir if channel else tmp_path / "media",
     )
 
@@ -452,7 +452,7 @@ async def test_on_message_attaches_reply_to_media_when_available(monkeypatch, tm
     media_dir = tmp_path / "media" / "telegram"
     media_dir.mkdir(parents=True)
     monkeypatch.setattr(
-        "nanobot.channels.telegram.get_media_dir",
+        "simpleclaw.channels.telegram.get_media_dir",
         lambda channel=None: media_dir if channel else tmp_path / "media",
     )
 
@@ -535,7 +535,7 @@ async def test_on_message_reply_to_caption_and_media(monkeypatch, tmp_path) -> N
     media_dir = tmp_path / "media" / "telegram"
     media_dir.mkdir(parents=True)
     monkeypatch.setattr(
-        "nanobot.channels.telegram.get_media_dir",
+        "simpleclaw.channels.telegram.get_media_dir",
         lambda channel=None: media_dir if channel else tmp_path / "media",
     )
 

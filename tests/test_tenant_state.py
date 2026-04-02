@@ -1,4 +1,4 @@
-from nanobot.tenant.state import TenantStateRepository
+from simpleclaw.tenant.state import TenantStateRepository
 
 
 def test_touch_interaction_sets_primary_session_and_activity(tmp_path) -> None:

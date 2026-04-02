@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from nanobot.config.schema import Config
-from nanobot.providers.base import GenerationSettings
-from nanobot.providers.litellm_provider import LiteLLMProvider
-from nanobot.providers.volcengine_responses_provider import VolcengineResponsesProvider
-from nanobot.runtime.agent_factory import make_provider
+from simpleclaw.config.schema import Config
+from simpleclaw.providers.base import GenerationSettings
+from simpleclaw.providers.litellm_provider import LiteLLMProvider
+from simpleclaw.providers.volcengine_responses_provider import VolcengineResponsesProvider
+from simpleclaw.runtime.agent_factory import make_provider
 
 
 class _FakeUsage:

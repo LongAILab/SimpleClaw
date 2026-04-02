@@ -22,5 +22,19 @@ poetry.lock
 .pytest_cache/
 botpy.log
 nano.*.save
+.simpleclaw/
 .nanobot/
+MagicMock/
+nanobot/
+.DS_Store
 
+# Private notes
+todolist.md
+todo1.md
+thinking.md
+think.md
+mysql.md
+multiServer.md
+kimi-caching-analysis.md
+皮肤知识库.md
+兜底.md

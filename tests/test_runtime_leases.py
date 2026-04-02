@@ -1,4 +1,4 @@
-from nanobot.runtime.leases import LeaseRepository
+from simpleclaw.runtime.leases import LeaseRepository
 
 
 def test_lease_acquire_and_release(tmp_path) -> None:

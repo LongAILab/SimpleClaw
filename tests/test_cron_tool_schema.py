@@ -1,14 +1,14 @@
 import pytest
 
-from nanobot.agent.tools.cron import (
+from simpleclaw.agent.tools.cron import (
     CronAddIntervalTool,
     CronAddOnceTool,
     CronListTool,
     CronRemoveTool,
     CronTool,
 )
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.cron.service import CronService
+from simpleclaw.agent.tools.registry import ToolRegistry
+from simpleclaw.cron.service import CronService
 
 
 @pytest.fixture()

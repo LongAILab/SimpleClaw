@@ -2,8 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from nanobot.cli.commands import app
-from nanobot.config.loader import load_config, save_config
+from simpleclaw.cli.commands import app
+from simpleclaw.config.loader import load_config, save_config
 
 runner = CliRunner()
 
@@ -96,8 +96,8 @@ def test_onboard_refresh_rewrites_legacy_config_template(tmp_path, monkeypatch) 
         encoding="utf-8",
     )
 
-    monkeypatch.setattr("nanobot.config.loader.get_config_path", lambda: config_path)
-    monkeypatch.setattr("nanobot.cli.commands.get_workspace_path", lambda: workspace)
+    monkeypatch.setattr("simpleclaw.config.loader.get_config_path", lambda: config_path)
+    monkeypatch.setattr("simpleclaw.cli.commands.get_workspace_path", lambda: workspace)
 
     result = runner.invoke(app, ["onboard"], input="n\n")
 
