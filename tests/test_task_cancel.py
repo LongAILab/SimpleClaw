@@ -54,7 +54,8 @@ class TestHandleStop:
 
         task = asyncio.create_task(slow_task())
         await asyncio.sleep(0)
-        loop._active_tasks["test:c1"] = [task]
+        routing_key = "__default__:test:c1"
+        loop._active_tasks[routing_key] = [task]
 
         msg = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="/stop")
         await loop._handle_stop(msg)
@@ -79,7 +80,8 @@ class TestHandleStop:
 
         tasks = [asyncio.create_task(slow(i)) for i in range(2)]
         await asyncio.sleep(0)
-        loop._active_tasks["test:c1"] = tasks
+        routing_key = "__default__:test:c1"
+        loop._active_tasks[routing_key] = tasks
 
         msg = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="/stop")
         await loop._handle_stop(msg)
@@ -96,7 +98,7 @@ class TestDispatch:
 
         loop, bus = _make_loop()
         msg = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="hello")
-        loop._process_message = AsyncMock(
+        loop._scheduler._process_message = AsyncMock(
             return_value=OutboundMessage(channel="test", chat_id="c1", content="hi")
         )
         await loop._dispatch(msg)
@@ -110,13 +112,13 @@ class TestDispatch:
         loop, bus = _make_loop()
         order = []
 
-        async def mock_process(m, **kwargs):
+        async def mock_process(m, on_progress=None):
             order.append(f"start-{m.content}")
             await asyncio.sleep(0.05)
             order.append(f"end-{m.content}")
             return OutboundMessage(channel="test", chat_id="c1", content=m.content)
 
-        loop._process_message = mock_process
+        loop._scheduler._process_message = mock_process
         msg1 = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="a")
         msg2 = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="b")
 
@@ -148,8 +150,9 @@ class TestSubagentCancellation:
 
         task = asyncio.create_task(slow())
         await asyncio.sleep(0)
+        scope = "__default__:test:c1"
         mgr._running_tasks["sub-1"] = task
-        mgr._session_tasks["test:c1"] = {"sub-1"}
+        mgr._session_tasks[scope] = {"sub-1"}
 
         count = await mgr.cancel_by_session("test:c1")
         assert count == 1

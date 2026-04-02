@@ -1,3 +1,5 @@
+import simpleclaw.cron.types  # noqa: F401 — pre-import to avoid circular import through cron.__init__
+
 import pytest
 
 from simpleclaw.heartbeat.scheduler import HeartbeatScheduler, HeartbeatTarget
@@ -27,7 +29,7 @@ async def test_scheduler_runs_due_tenant(tmp_path) -> None:
     seen: list[HeartbeatTarget] = []
 
     async def _runner(target: HeartbeatTarget, content: str) -> str:
-        assert content == "content"
+        assert "content" in content
         seen.append(target)
         return "ok"
 

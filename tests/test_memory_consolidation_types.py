@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from simpleclaw.agent.memory import MemoryStore
+from simpleclaw.agent.memory_store import MemoryStore
 from simpleclaw.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 
 
@@ -23,8 +23,12 @@ def _make_messages(message_count: int = 30):
     ]
 
 
-def _make_tool_response(history_entry, memory_update):
+def _make_tool_response(history_entry, memory_additions=None, memory_removals=None):
     """Create an LLMResponse with a save_memory tool call."""
+    if memory_additions is None:
+        memory_additions = []
+    if memory_removals is None:
+        memory_removals = []
     return LLMResponse(
         content=None,
         tool_calls=[
@@ -33,7 +37,8 @@ def _make_tool_response(history_entry, memory_update):
                 name="save_memory",
                 arguments={
                     "history_entry": history_entry,
-                    "memory_update": memory_update,
+                    "memory_additions": memory_additions,
+                    "memory_removals": memory_removals,
                 },
             )
         ],
@@ -67,7 +72,8 @@ class TestMemoryConsolidationTypeHandling:
         provider.chat = AsyncMock(
             return_value=_make_tool_response(
                 history_entry="[2026-01-01] User discussed testing.",
-                memory_update="# Memory\nUser likes testing.",
+                memory_additions=["User likes testing."],
+                memory_removals=[],
             )
         )
         provider.chat_with_retry = provider.chat
@@ -82,13 +88,14 @@ class TestMemoryConsolidationTypeHandling:
 
     @pytest.mark.asyncio
     async def test_dict_arguments_serialized_to_json(self, tmp_path: Path) -> None:
-        """Issue #1042: LLM returns dict instead of string — must not raise TypeError."""
+        """Issue #1042: LLM returns dict instead of string for history_entry — must not raise TypeError."""
         store = MemoryStore(tmp_path)
         provider = AsyncMock()
         provider.chat = AsyncMock(
             return_value=_make_tool_response(
                 history_entry={"timestamp": "2026-01-01", "summary": "User discussed testing."},
-                memory_update={"facts": ["User likes testing"], "topics": ["testing"]},
+                memory_additions=["User likes testing"],
+                memory_removals=[],
             )
         )
         provider.chat_with_retry = provider.chat
@@ -103,8 +110,7 @@ class TestMemoryConsolidationTypeHandling:
         assert parsed["summary"] == "User discussed testing."
 
         memory_content = store.memory_file.read_text()
-        parsed_mem = json.loads(memory_content)
-        assert "User likes testing" in parsed_mem["facts"]
+        assert "User likes testing" in memory_content
 
     @pytest.mark.asyncio
     async def test_string_arguments_as_raw_json(self, tmp_path: Path) -> None:
@@ -120,7 +126,8 @@ class TestMemoryConsolidationTypeHandling:
                     name="save_memory",
                     arguments=json.dumps({
                         "history_entry": "[2026-01-01] User discussed testing.",
-                        "memory_update": "# Memory\nUser likes testing.",
+                        "memory_additions": ["User likes testing."],
+                        "memory_removals": [],
                     }),
                 )
             ],
@@ -177,7 +184,8 @@ class TestMemoryConsolidationTypeHandling:
                     name="save_memory",
                     arguments=[{
                         "history_entry": "[2026-01-01] User discussed testing.",
-                        "memory_update": "# Memory\nUser likes testing.",
+                        "memory_additions": ["User likes testing."],
+                        "memory_removals": [],
                     }],
                 )
             ],
@@ -252,7 +260,10 @@ class TestMemoryConsolidationTypeHandling:
                     ToolCallRequest(
                         id="call_1",
                         name="save_memory",
-                        arguments={"memory_update": "# Memory\nOnly memory update"},
+                        arguments={
+                            "memory_additions": ["Only memory addition"],
+                            "memory_removals": [],
+                        },
                     )
                 ],
             )
@@ -266,8 +277,8 @@ class TestMemoryConsolidationTypeHandling:
         assert not store.memory_file.exists()
 
     @pytest.mark.asyncio
-    async def test_missing_memory_update_returns_false_without_writing(self, tmp_path: Path) -> None:
-        """Do not append history if memory_update is missing."""
+    async def test_missing_memory_additions_returns_false_without_writing(self, tmp_path: Path) -> None:
+        """Do not append history if memory_additions is missing."""
         store = MemoryStore(tmp_path)
         provider = AsyncMock()
         provider.chat_with_retry = AsyncMock(
@@ -277,7 +288,7 @@ class TestMemoryConsolidationTypeHandling:
                     ToolCallRequest(
                         id="call_1",
                         name="save_memory",
-                        arguments={"history_entry": "[2026-01-01] Partial output."},
+                        arguments={"history_entry": "[2026-01-01] Partial output.", "memory_removals": []},
                     )
                 ],
             )
@@ -298,7 +309,8 @@ class TestMemoryConsolidationTypeHandling:
         provider.chat_with_retry = AsyncMock(
             return_value=_make_tool_response(
                 history_entry=None,
-                memory_update="# Memory\nUser likes testing.",
+                memory_additions=["User likes testing."],
+                memory_removals=[],
             )
         )
         messages = _make_messages(message_count=60)
@@ -317,7 +329,8 @@ class TestMemoryConsolidationTypeHandling:
         provider.chat_with_retry = AsyncMock(
             return_value=_make_tool_response(
                 history_entry="   ",
-                memory_update="# Memory\nUser likes testing.",
+                memory_additions=["User likes testing."],
+                memory_removals=[],
             )
         )
         messages = _make_messages(message_count=60)
@@ -335,7 +348,8 @@ class TestMemoryConsolidationTypeHandling:
             LLMResponse(content="503 server error", finish_reason="error"),
             _make_tool_response(
                 history_entry="[2026-01-01] User discussed testing.",
-                memory_update="# Memory\nUser likes testing.",
+                memory_additions=["User likes testing."],
+                memory_removals=[],
             ),
         ])
         messages = _make_messages(message_count=60)
@@ -360,7 +374,8 @@ class TestMemoryConsolidationTypeHandling:
         provider.chat_with_retry = AsyncMock(
             return_value=_make_tool_response(
                 history_entry="[2026-01-01] User discussed testing.",
-                memory_update="# Memory\nUser likes testing.",
+                memory_additions=["User likes testing."],
+                memory_removals=[],
             )
         )
         messages = _make_messages(message_count=60)
@@ -387,7 +402,8 @@ class TestMemoryConsolidationTypeHandling:
         )
         ok_resp = _make_tool_response(
             history_entry="[2026-01-01] Fallback worked.",
-            memory_update="# Memory\nFallback OK.",
+            memory_additions=["Fallback OK."],
+            memory_removals=[],
         )
 
         call_log: list[dict] = []
@@ -459,7 +475,8 @@ class TestMemoryConsolidationTypeHandling:
         no_tool = LLMResponse(content="Nope.", finish_reason="stop", tool_calls=[])
         ok_resp = _make_tool_response(
             history_entry="[2026-01-01] OK.",
-            memory_update="# Memory\nOK.",
+            memory_additions=["OK."],
+            memory_removals=[],
         )
         messages = _make_messages(message_count=10)
 

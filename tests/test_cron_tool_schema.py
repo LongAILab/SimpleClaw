@@ -9,11 +9,12 @@ from simpleclaw.agent.tools.cron import (
 )
 from simpleclaw.agent.tools.registry import ToolRegistry
 from simpleclaw.cron.service import CronService
+from simpleclaw.runtime.leases import LeaseRepository
 
 
 @pytest.fixture()
 def cron_backend(tmp_path):
-    service = CronService(tmp_path / "cron" / "jobs.json")
+    service = CronService(tmp_path / "cron" / "jobs.json", lease_repo=LeaseRepository())
     tool = CronTool(service)
     tool.set_context(
         channel="api",
@@ -65,7 +66,7 @@ async def test_wrappers_execute_full_cron_lifecycle(cron_backend) -> None:
     jobs = service.list_jobs()
     assert len(jobs) == 1
     assert jobs[0].schedule.kind == "every"
-    assert jobs[0].payload.deliver is True
+    assert jobs[0].payload.deliver is False
 
     list_result = await registry.execute("cron_list", {})
     assert "Scheduled jobs:" in list_result

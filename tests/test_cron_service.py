@@ -4,10 +4,11 @@ import pytest
 
 from simpleclaw.cron.service import CronService
 from simpleclaw.cron.types import CronSchedule
+from simpleclaw.runtime.leases import LeaseRepository
 
 
 def test_add_job_rejects_unknown_timezone(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
+    service = CronService(tmp_path / "cron" / "jobs.json", lease_repo=LeaseRepository())
 
     with pytest.raises(ValueError, match="unknown timezone 'America/Vancovuer'"):
         service.add_job(
@@ -20,7 +21,7 @@ def test_add_job_rejects_unknown_timezone(tmp_path) -> None:
 
 
 def test_add_job_accepts_valid_timezone(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
+    service = CronService(tmp_path / "cron" / "jobs.json", lease_repo=LeaseRepository())
 
     job = service.add_job(
         name="tz ok",
@@ -40,7 +41,7 @@ async def test_running_service_honors_external_disable(tmp_path) -> None:
     async def on_job(job) -> None:
         called.append(job.id)
 
-    service = CronService(store_path, on_job=on_job)
+    service = CronService(store_path, on_job=on_job, lease_repo=LeaseRepository())
     job = service.add_job(
         name="external-disable",
         schedule=CronSchedule(kind="every", every_ms=200),
@@ -50,7 +51,7 @@ async def test_running_service_honors_external_disable(tmp_path) -> None:
     try:
         # Wait slightly to ensure file mtime is definitively different
         await asyncio.sleep(0.05)
-        external = CronService(store_path)
+        external = CronService(store_path, lease_repo=LeaseRepository())
         updated = external.enable_job(job.id, enabled=False)
         assert updated is not None
         assert updated.enabled is False
@@ -63,7 +64,7 @@ async def test_running_service_honors_external_disable(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_disabled_service_does_not_start_scheduler(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json", enabled=False)
+    service = CronService(tmp_path / "cron" / "jobs.json", enabled=False, lease_repo=LeaseRepository())
     service.add_job(
         name="disabled",
         schedule=CronSchedule(kind="every", every_ms=200),

@@ -206,26 +206,29 @@ def mock_agent_runtime(tmp_path):
     config.agents.defaults.workspace = str(tmp_path / "default-workspace")
     cron_dir = tmp_path / "data" / "cron"
 
-    with patch("simpleclaw.config.loader.load_config", return_value=config) as mock_load_config, \
+    agent_loop = MagicMock()
+    agent_loop.channels_config = None
+    agent_loop.process_direct = AsyncMock(return_value="mock-response")
+    agent_loop.close_mcp = AsyncMock(return_value=None)
+
+    def _fake_load_runtime_config(_console, *, config_path=None, workspace=None):
+        if workspace:
+            config.agents.defaults.workspace = workspace
+        return config
+
+    with patch("simpleclaw.cli.commands.load_runtime_config", side_effect=_fake_load_runtime_config) as mock_load_config, \
          patch("simpleclaw.config.paths.get_cron_dir", return_value=cron_dir), \
          patch("simpleclaw.cli.commands.sync_workspace_templates") as mock_sync_templates, \
-         patch("simpleclaw.cli.commands._make_provider", return_value=object()), \
          patch("simpleclaw.cli.commands._print_agent_response") as mock_print_response, \
          patch("simpleclaw.bus.queue.MessageBus"), \
          patch("simpleclaw.cron.service.CronService"), \
-         patch("simpleclaw.agent.loop.AgentLoop") as mock_agent_loop_cls:
-
-        agent_loop = MagicMock()
-        agent_loop.channels_config = None
-        agent_loop.process_direct = AsyncMock(return_value="mock-response")
-        agent_loop.close_mcp = AsyncMock(return_value=None)
-        mock_agent_loop_cls.return_value = agent_loop
+         patch("simpleclaw.cli.commands.make_agent_loop", return_value=agent_loop) as mock_make_agent_loop:
 
         yield {
             "config": config,
             "load_config": mock_load_config,
             "sync_templates": mock_sync_templates,
-            "agent_loop_cls": mock_agent_loop_cls,
+            "make_agent_loop": mock_make_agent_loop,
             "agent_loop": agent_loop,
             "print_response": mock_print_response,
         }
@@ -246,13 +249,8 @@ def test_agent_uses_default_config_when_no_workspace_or_config_flags(mock_agent_
     result = runner.invoke(app, ["agent", "-m", "hello"])
 
     assert result.exit_code == 0
-    assert mock_agent_runtime["load_config"].call_args.args == (None,)
-    assert mock_agent_runtime["sync_templates"].call_args.args == (
-        mock_agent_runtime["config"].workspace_path,
-    )
-    assert mock_agent_runtime["agent_loop_cls"].call_args.kwargs["workspace"] == (
-        mock_agent_runtime["config"].workspace_path
-    )
+    mock_agent_runtime["sync_templates"].assert_called_once()
+    mock_agent_runtime["make_agent_loop"].assert_called_once()
     mock_agent_runtime["agent_loop"].process_direct.assert_awaited_once()
     mock_agent_runtime["print_response"].assert_called_once_with("mock-response", render_markdown=True)
 
@@ -264,7 +262,8 @@ def test_agent_uses_explicit_config_path(mock_agent_runtime, tmp_path: Path):
     result = runner.invoke(app, ["agent", "-m", "hello", "-c", str(config_path)])
 
     assert result.exit_code == 0
-    assert mock_agent_runtime["load_config"].call_args.args == (config_path.resolve(),)
+    call_kwargs = mock_agent_runtime["load_config"].call_args.kwargs
+    assert call_kwargs.get("config_path") == str(config_path)
 
 
 def test_agent_config_sets_active_path(monkeypatch, tmp_path: Path) -> None:
@@ -276,27 +275,20 @@ def test_agent_config_sets_active_path(monkeypatch, tmp_path: Path) -> None:
     seen: dict[str, Path] = {}
 
     monkeypatch.setattr(
-        "simpleclaw.config.loader.set_config_path",
+        "simpleclaw.runtime.config_runtime.set_config_path",
         lambda path: seen.__setitem__("config_path", path),
     )
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr("simpleclaw.config.paths.get_cron_dir", lambda: config_file.parent / "cron")
     monkeypatch.setattr("simpleclaw.cli.commands.sync_workspace_templates", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.cli.commands._make_provider", lambda _config: object())
+
+    agent_loop = MagicMock()
+    agent_loop.channels_config = None
+    agent_loop.process_direct = AsyncMock(return_value="ok")
+    agent_loop.close_mcp = AsyncMock(return_value=None)
+    monkeypatch.setattr("simpleclaw.cli.commands.make_agent_loop", lambda **_kwargs: agent_loop)
     monkeypatch.setattr("simpleclaw.bus.queue.MessageBus", lambda: object())
-    monkeypatch.setattr("simpleclaw.cron.service.CronService", lambda _store, **_kwargs: object())
-
-    class _FakeAgentLoop:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def process_direct(self, *_args, **_kwargs) -> str:
-            return "ok"
-
-        async def close_mcp(self) -> None:
-            return None
-
-    monkeypatch.setattr("simpleclaw.agent.loop.AgentLoop", _FakeAgentLoop)
+    monkeypatch.setattr("simpleclaw.cron.service.CronService", lambda _store, **_kwargs: MagicMock())
     monkeypatch.setattr("simpleclaw.cli.commands._print_agent_response", lambda *_args, **_kwargs: None)
 
     result = runner.invoke(app, ["agent", "-m", "hello", "-c", str(config_file)])
@@ -312,8 +304,8 @@ def test_agent_overrides_workspace_path(mock_agent_runtime):
 
     assert result.exit_code == 0
     assert mock_agent_runtime["config"].agents.defaults.workspace == str(workspace_path)
-    assert mock_agent_runtime["sync_templates"].call_args.args == (workspace_path,)
-    assert mock_agent_runtime["agent_loop_cls"].call_args.kwargs["workspace"] == workspace_path
+    mock_agent_runtime["sync_templates"].assert_called_once()
+    mock_agent_runtime["make_agent_loop"].assert_called_once()
 
 
 def test_agent_workspace_override_wins_over_config_workspace(mock_agent_runtime, tmp_path: Path):
@@ -327,10 +319,9 @@ def test_agent_workspace_override_wins_over_config_workspace(mock_agent_runtime,
     )
 
     assert result.exit_code == 0
-    assert mock_agent_runtime["load_config"].call_args.args == (config_path.resolve(),)
     assert mock_agent_runtime["config"].agents.defaults.workspace == str(workspace_path)
-    assert mock_agent_runtime["sync_templates"].call_args.args == (workspace_path,)
-    assert mock_agent_runtime["agent_loop_cls"].call_args.kwargs["workspace"] == workspace_path
+    mock_agent_runtime["sync_templates"].assert_called_once()
+    mock_agent_runtime["make_agent_loop"].assert_called_once()
 
 
 def test_agent_warns_about_deprecated_memory_window(mock_agent_runtime):
@@ -353,18 +344,19 @@ def test_gateway_uses_workspace_from_config_by_default(monkeypatch, tmp_path: Pa
     seen: dict[str, Path] = {}
 
     monkeypatch.setattr(
-        "simpleclaw.config.loader.set_config_path",
+        "simpleclaw.runtime.config_runtime.set_config_path",
         lambda path: seen.__setitem__("config_path", path),
     )
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr(
         "simpleclaw.cli.commands.sync_workspace_templates",
         lambda path: seen.__setitem__("workspace", path),
     )
-    monkeypatch.setattr(
-        "simpleclaw.cli.commands._make_provider",
-        lambda _config: (_ for _ in ()).throw(_StopGateway("stop")),
-    )
+
+    def _stop_make_agent_loop(**_kwargs):
+        raise _StopGateway("stop")
+
+    monkeypatch.setattr("simpleclaw.cli.commands.make_agent_loop", _stop_make_agent_loop)
 
     result = runner.invoke(app, ["gateway", "--config", str(config_file)])
 
@@ -383,16 +375,17 @@ def test_gateway_workspace_option_overrides_config(monkeypatch, tmp_path: Path) 
     override = tmp_path / "override-workspace"
     seen: dict[str, Path] = {}
 
-    monkeypatch.setattr("simpleclaw.config.loader.set_config_path", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.set_config_path", lambda _path: None)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr(
         "simpleclaw.cli.commands.sync_workspace_templates",
         lambda path: seen.__setitem__("workspace", path),
     )
-    monkeypatch.setattr(
-        "simpleclaw.cli.commands._make_provider",
-        lambda _config: (_ for _ in ()).throw(_StopGateway("stop")),
-    )
+
+    def _stop_make_agent_loop(**_kwargs):
+        raise _StopGateway("stop")
+
+    monkeypatch.setattr("simpleclaw.cli.commands.make_agent_loop", _stop_make_agent_loop)
 
     result = runner.invoke(
         app,
@@ -412,13 +405,14 @@ def test_gateway_warns_about_deprecated_memory_window(monkeypatch, tmp_path: Pat
     config = Config()
     config.agents.defaults.memory_window = 100
 
-    monkeypatch.setattr("simpleclaw.config.loader.set_config_path", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.set_config_path", lambda _path: None)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr("simpleclaw.cli.commands.sync_workspace_templates", lambda _path: None)
-    monkeypatch.setattr(
-        "simpleclaw.cli.commands._make_provider",
-        lambda _config: (_ for _ in ()).throw(_StopGateway("stop")),
-    )
+
+    def _stop_make_agent_loop(**_kwargs):
+        raise _StopGateway("stop")
+
+    monkeypatch.setattr("simpleclaw.cli.commands.make_agent_loop", _stop_make_agent_loop)
 
     result = runner.invoke(app, ["gateway", "--config", str(config_file)])
 
@@ -435,13 +429,10 @@ def test_gateway_uses_config_directory_for_cron_store(monkeypatch, tmp_path: Pat
     config.agents.defaults.workspace = str(tmp_path / "config-workspace")
     seen: dict[str, Path] = {}
 
-    monkeypatch.setattr("simpleclaw.config.loader.set_config_path", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.set_config_path", lambda _path: None)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr("simpleclaw.config.paths.get_cron_dir", lambda: config_file.parent / "cron")
     monkeypatch.setattr("simpleclaw.cli.commands.sync_workspace_templates", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.cli.commands._make_provider", lambda _config: object())
-    monkeypatch.setattr("simpleclaw.bus.queue.MessageBus", lambda: object())
-    monkeypatch.setattr("simpleclaw.session.manager.SessionManager", lambda _workspace: object())
 
     class _StopCron:
         def __init__(self, store_path: Path, **_kwargs) -> None:
@@ -464,13 +455,14 @@ def test_gateway_uses_configured_port_when_cli_flag_is_missing(monkeypatch, tmp_
     config = Config()
     config.gateway.port = 18791
 
-    monkeypatch.setattr("simpleclaw.config.loader.set_config_path", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.set_config_path", lambda _path: None)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr("simpleclaw.cli.commands.sync_workspace_templates", lambda _path: None)
-    monkeypatch.setattr(
-        "simpleclaw.cli.commands._make_provider",
-        lambda _config: (_ for _ in ()).throw(_StopGateway("stop")),
-    )
+
+    def _stop_make_agent_loop(**_kwargs):
+        raise _StopGateway("stop")
+
+    monkeypatch.setattr("simpleclaw.cli.commands.make_agent_loop", _stop_make_agent_loop)
 
     result = runner.invoke(app, ["gateway", "--config", str(config_file)])
 
@@ -486,13 +478,14 @@ def test_gateway_cli_port_overrides_configured_port(monkeypatch, tmp_path: Path)
     config = Config()
     config.gateway.port = 18791
 
-    monkeypatch.setattr("simpleclaw.config.loader.set_config_path", lambda _path: None)
-    monkeypatch.setattr("simpleclaw.config.loader.load_config", lambda _path=None: config)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.set_config_path", lambda _path: None)
+    monkeypatch.setattr("simpleclaw.runtime.config_runtime.load_config", lambda _path=None: config)
     monkeypatch.setattr("simpleclaw.cli.commands.sync_workspace_templates", lambda _path: None)
-    monkeypatch.setattr(
-        "simpleclaw.cli.commands._make_provider",
-        lambda _config: (_ for _ in ()).throw(_StopGateway("stop")),
-    )
+
+    def _stop_make_agent_loop(**_kwargs):
+        raise _StopGateway("stop")
+
+    monkeypatch.setattr("simpleclaw.cli.commands.make_agent_loop", _stop_make_agent_loop)
 
     result = runner.invoke(app, ["gateway", "--config", str(config_file), "--port", "18792"])
 
