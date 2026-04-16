@@ -8,6 +8,7 @@ from typing import Any, Callable, Coroutine
 from simpleclaw.cron.repository import CronRepository
 from simpleclaw.cron.scheduler import CronScheduler
 from simpleclaw.cron.types import CronJob, CronSchedule
+from simpleclaw.runtime.leases import LeaseRepository
 from simpleclaw.storage.interfaces import CronJobStore, LeaseStore
 
 
