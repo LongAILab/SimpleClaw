@@ -168,3 +168,16 @@ curl -N -X POST http://127.0.0.1:18790/turn/stream \
 说明：
 - `sclaw api` 默认端口是 `18791`（`simpleclaw/cli/commands.py:534`）。
 - `api-test.html` 默认连的是 `18790`（`api-test.html:349`），需要改页面 base URL 或用 `sclaw serve chat-api --port 18790`。
+
+
+工具调用路径:
+ 1. 首先进入 server.py
+先进入_run_return, 然后拼装好一些tenant_key, conversation_id 等信息
+2. 交付给loop.py 的 process_direct()
+在这一部分会把这些信息打包成 InboundMessage, 然后交付给
+3. scheduler.py的 submit 函数
+这里有一个理解点是 queue 和 lane, 其中 queue 是用来保证
+同一个 tenant 的用户的同一个 session 是串行执行的, 不能
+下面的信息比上面的信息先到
+而 lane 是确保全局并发的, 比如 limit 为 1, 那么就只能有一个人跟 agent 对话
+4. 接下来就交付给 turn_processor

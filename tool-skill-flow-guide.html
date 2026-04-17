@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SimpleClaw Tool / Skill 调用流程讲解</title>
+  <style>
+    :root {
+      --bg: #f6f3ed;
+      --ink: #172031;
+      --muted: #5e6778;
+      --line: #d8d0c4;
+      --card: #fffdf8;
+      --accent: #d66037;
+      --accent-2: #0f766e;
+      --accent-3: #1f4f8f;
+      --ok: #e6f6f3;
+      --warn: #fff2df;
+      --vio: #edf1ff;
+      --shadow: 0 10px 26px rgba(31, 27, 22, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 0% 0%, #fff4e4 0%, transparent 44%),
+        radial-gradient(circle at 100% 100%, #e8f8f4 0%, transparent 38%),
+        var(--bg);
+      color: var(--ink);
+      font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.55;
+    }
+
+    .wrap {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(132deg, #fffdf8 0%, #fff7eb 45%, #f3f9ff 100%);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      animation: rise .45s ease;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: .2px;
+    }
+
+    .hero p {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+      max-width: 1000px;
+    }
+
+    .chips {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #fff;
+      color: #33405a;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fff9ef;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .controls {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 8px;
+      background: #fffdf6;
+    }
+
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #28344b;
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 7px 14px rgba(19, 26, 37, 0.1);
+    }
+
+    .btn.active {
+      border-color: #0f6f66;
+      background: #dff8f4;
+      color: #0a5049;
+    }
+
+    .timeline {
+      padding: 12px;
+      display: grid;
+      gap: 9px;
+      max-height: 760px;
+      overflow: auto;
+    }
+
+    .node {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px;
+      cursor: pointer;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    .node:hover {
+      border-color: #b7c6e2;
+      box-shadow: 0 8px 16px rgba(18, 33, 63, 0.08);
+    }
+
+    .node.active {
+      border-color: #1d4f8d;
+      box-shadow: 0 10px 22px rgba(26, 53, 96, 0.15);
+    }
+
+    .node-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 5px;
+      align-items: center;
+    }
+
+    .node-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .tag {
+      font-size: 10px;
+      font-weight: 800;
+      border-radius: 999px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    .tag.skill { background: var(--warn); color: #895112; }
+    .tag.tool { background: var(--ok); color: #0e675e; }
+    .tag.flow { background: var(--vio); color: #33438f; }
+
+    .node p {
+      margin: 0;
+      color: #3f4960;
+      font-size: 12px;
+    }
+
+    .detail {
+      padding: 14px;
+      display: grid;
+      gap: 11px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #fff;
+      padding: 9px;
+    }
+
+    .stat b {
+      display: block;
+      font-size: 11px;
+      color: #5f6a7d;
+      margin-bottom: 4px;
+    }
+
+    .stat span {
+      font-size: 13px;
+      font-weight: 800;
+      color: #1f2940;
+    }
+
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 11px;
+    }
+
+    .box h3 {
+      margin: 0 0 7px;
+      font-size: 13px;
+    }
+
+    .box p {
+      margin: 0;
+      font-size: 12px;
+      color: #354056;
+    }
+
+    .hidden { display: none; }
+
+    .list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 12px;
+      color: #31405d;
+    }
+
+    .list li {
+      border: 1px dashed #c8d2e6;
+      border-radius: 9px;
+      background: #f8faff;
+      padding: 7px 9px;
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th, td {
+      border-bottom: 1px solid #ece5da;
+      text-align: left;
+      padding: 8px 6px;
+      vertical-align: top;
+    }
+
+    th {
+      font-size: 11px;
+      color: #59657a;
+      font-weight: 800;
+      background: #fffaf1;
+    }
+
+    td code {
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+      color: #27426e;
+    }
+
+    .seq-wrap {
+      display: grid;
+      gap: 8px;
+    }
+
+    .seq-lanes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .seq-lane {
+      border: 1px solid #ced9ea;
+      background: #f4f8ff;
+      color: #274067;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    .seq-events {
+      display: grid;
+      gap: 7px;
+    }
+
+    .seq-event {
+      display: grid;
+      grid-template-columns: 40px 120px 24px 140px 1fr;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #d9d0c4;
+      border-radius: 10px;
+      padding: 7px;
+      background: #fff;
+      font-size: 12px;
+      color: #2d3a54;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+
+    .seq-event.active {
+      border-color: #1a538d;
+      box-shadow: 0 8px 16px rgba(26, 53, 96, 0.16);
+      transform: translateY(-1px);
+    }
+
+    .seq-idx {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 1px solid #d1d9e9;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 11px;
+      background: #f5f8ff;
+      color: #284571;
+    }
+
+    .seq-side {
+      border: 1px solid #d8dfec;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #f8fbff;
+      color: #244267;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .seq-arrow {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #47618d;
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    .seq-label {
+      color: #2f3d59;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1120px) {
+      .main { grid-template-columns: 1fr; }
+      .timeline { max-height: 520px; }
+    }
+
+    @media (max-width: 760px) {
+      .wrap { padding: 12px; }
+      h1 { font-size: 23px; }
+      .stats { grid-template-columns: 1fr; }
+      .panel-head { flex-direction: column; align-items: flex-start; }
+      th:nth-child(4), td:nth-child(4) { display: none; }
+      .seq-event { grid-template-columns: 36px 1fr 24px 1fr; }
+      .seq-label { grid-column: 1 / -1; border-top: 1px dashed #e1d9cd; padding-top: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>SimpleClaw: Tool / Skill 调用机制可视化讲解</h1>
+      <p>聚焦三件事：`skill` 如何进入 prompt、`tool` 何时被调用与 guard、以及一轮消息从入口到回合收尾的完整链路。左侧可按“Skill 线 / Tool 线 / 全链路 / 序列图”切换。</p>
+      <div class="chips">
+        <span class="chip">入口: `AgentLoop.process_direct`</span>
+        <span class="chip">Skill 注入: `ContextBuilder._build_skill_layer`</span>
+        <span class="chip">Tool 循环: `TurnProcessor.run_agent_loop`</span>
+        <span class="chip">执行防线: `ToolExecutionGuard.execute`</span>
+      </div>
+    </section>
+
+    <section class="main">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>流程选择</h2>
+          <span id="badge" style="font-size:12px;color:#5d6980;">-</span>
+        </div>
+        <div class="controls">
+          <div class="row" id="modeBtns"></div>
+          <div class="row">
+            <button class="btn" id="prevBtn">上一步</button>
+            <button class="btn" id="nextBtn">下一步</button>
+            <button class="btn" id="playBtn">自动播放</button>
+          </div>
+        </div>
+        <div class="timeline" id="timeline"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>步骤细节</h2>
+          <span id="stepMeta" style="font-size:12px;color:#5d6980;">-</span>
+        </div>
+        <div class="detail">
+          <section class="stats" id="statsSection">
+            <div class="stat"><b>调用时机</b><span id="timing">-</span></div>
+            <div class="stat"><b>触发条件</b><span id="trigger">-</span></div>
+            <div class="stat"><b>产物</b><span id="output">-</span></div>
+          </section>
+
+          <section class="box" id="mechanismSection">
+            <h3>机制说明</h3>
+            <p id="mechanism">-</p>
+          </section>
+
+          <section class="box" id="branchSection">
+            <h3>关键分支</h3>
+            <ul class="list" id="branches"></ul>
+          </section>
+
+          <section class="box" id="anchorSection">
+            <h3>代码锚点</h3>
+            <ul class="list" id="anchors"></ul>
+          </section>
+
+          <section class="box" id="matrixSection">
+            <h3>调用时机矩阵</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>机制</th>
+                  <th>函数</th>
+                  <th>何时调用</th>
+                  <th>为什么在这里</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Skill 层装配</td>
+                  <td><code>ContextBuilder._build_skill_layer</code></td>
+                  <td>每轮构建 system prompt 时</td>
+                  <td>把 always skill 全文和 available skill 摘要注入 prompt。</td>
+                </tr>
+                <tr>
+                  <td>Tool Schema 暴露</td>
+                  <td><code>TurnProcessor._filter_tool_definitions</code></td>
+                  <td>每次 LLM 请求前</td>
+                  <td>按 lane 过滤可见工具，例如 `main` 隐藏 `message`。</td>
+                </tr>
+                <tr>
+                  <td>Tool Guard 执行</td>
+                  <td><code>ToolExecutionGuard.execute</code></td>
+                  <td>每个 tool_call</td>
+                  <td>先做 deferred/handler 判定，再进入 validate + execute 管线。</td>
+                </tr>
+                <tr>
+                  <td>结果回填</td>
+                  <td><code>ContextBuilder.add_tool_result</code></td>
+                  <td>每个 tool_call 之后</td>
+                  <td>让模型读取 tool 输出进入下一轮推理。</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="box" id="sequenceSection">
+            <h3>序列图视图</h3>
+            <div class="seq-wrap">
+              <div class="seq-lanes" id="seqLanes"></div>
+              <div class="seq-events" id="seqEvents"></div>
+            </div>
+          </section>
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const modes = [
+      { id: "skill", label: "Skill 线" },
+      { id: "tool", label: "Tool 线" },
+      { id: "full", label: "全链路" },
+      { id: "sequence", label: "序列图" }
+    ];
+
+    const nodes = [
+      {
+        id: "f1",
+        type: "flow",
+        title: "入口消息进入 AgentLoop",
+        summary: "`process_direct` 统一封装 metadata/lane 并提交给 scheduler mailbox。",
+        timing: "每轮开始",
+        trigger: "收到 direct 输入或总线消息",
+        output: "InboundMessage + 路由信息",
+        mechanism: "入口不直接跑模型，而是先进入会话串行调度，保证同 session 顺序与 lane 并发边界。",
+        branches: [
+          "首次调用前会尝试 `_connect_mcp` 懒连接 MCP。",
+          "`_claim_session_ownership` 可选启用跨 worker 会话互斥。"
+        ],
+        anchors: [
+          "simpleclaw/agent/loop.py:573",
+          "simpleclaw/agent/loop.py:594",
+          "simpleclaw/agent/loop.py:617"
+        ],
+        modes: ["full"]
+      },
+      {
+        id: "s1",
+        type: "skill",
+        title: "Skill 目录发现与优先级",
+        summary: "`SkillsLoader` 同时管理 workspace/shared/builtin 三层技能目录。",
+        timing: "ContextBuilder 初始化时可用",
+        trigger: "创建 `ContextBuilder`",
+        output: "可用于 prompt 的技能索引",
+        mechanism: "`_prompt_skill_locations` 只返回 workspace+shared，`_skill_locations` 再补 builtin 作为 fallback。",
+        branches: [
+          "同名 skill 只保留优先命中的来源（去重）。",
+          "可按 `source_filter` 分别构建 shared 与 tenant skill 层。"
+        ],
+        anchors: [
+          "simpleclaw/agent/skills.py:39",
+          "simpleclaw/agent/skills.py:46",
+          "simpleclaw/agent/skills.py:53"
+        ],
+        modes: ["skill", "full"]
+      },
+      {
+        id: "s2",
+        type: "skill",
+        title: "Skill 注入时机：构建 System Prompt",
+        summary: "`build_system_prompt_sections` 在每轮 LLM 请求前重建 skill 层。",
+        timing: "每轮进入 LLM 前",
+        trigger: "`ContextBuilder.build_messages` 被调用",
+        output: "`full_prompt` + stable/dynamic 分层缓存",
+        mechanism: "shared skills 放 stable 前缀，tenant skills 放 dynamic tail，兼顾缓存稳定性与租户可变配置。",
+        branches: [
+          "always skills -> `load_skills_for_context` 全文注入 Active Skills。",
+          "普通技能 -> `build_skills_summary` 以摘要注入 Available Skills。"
+        ],
+        anchors: [
+          "simpleclaw/agent/context.py:200",
+          "simpleclaw/agent/context.py:215",
+          "simpleclaw/agent/context.py:227",
+          "simpleclaw/agent/context.py:258",
+          "simpleclaw/agent/context.py:268"
+        ],
+        modes: ["skill", "full"]
+      },
+      {
+        id: "s3",
+        type: "skill",
+        title: "Skill 对推理的作用点",
+        summary: "Skill 不单独“执行”，而是通过 prompt 影响后续 tool 规划与回答策略。",
+        timing: "LLM 推理阶段",
+        trigger: "`build_messages` 返回含 skill 层的 system 消息",
+        output: "模型决策偏好（是否读 skill、是否调工具）",
+        mechanism: "这意味着 skill 的“调用”实质是 prompt 组装事件，不是 runtime 函数回调。",
+        branches: [
+          "`skill_names` 参数目前保留未启用（`del skill_names`）。",
+          "runtime context 与 user 内容会合并为单条 user message，降低 provider 兼容风险。"
+        ],
+        anchors: [
+          "simpleclaw/agent/context.py:207",
+          "simpleclaw/agent/context.py:354",
+          "simpleclaw/agent/context.py:381"
+        ],
+        modes: ["skill", "full"]
+      },
+      {
+        id: "t1",
+        type: "tool",
+        title: "Tool 注册与可见性控制",
+        summary: "`AgentLoop._register_default_tools` 注册工具；`ToolRegistry` 控制是否暴露给 LLM。",
+        timing: "启动期",
+        trigger: "`AgentLoop.__init__`",
+        output: "统一工具实例与 schema 列表",
+        mechanism: "同一个 registry 支持 runtime `get(name)` 与 LLM schema `get_definitions()`，后者会跳过 `expose_to_llm=False` 工具。",
+        branches: [
+          "cron 主工具不直接暴露，暴露的是 add/list/remove facade。",
+          "MCP 工具后续通过 `_connect_mcp` 动态补充进 registry。"
+        ],
+        anchors: [
+          "simpleclaw/agent/loop.py:246",
+          "simpleclaw/agent/loop.py:275",
+          "simpleclaw/agent/tools/registry.py:19",
+          "simpleclaw/agent/tools/registry.py:38",
+          "simpleclaw/agent/loop.py:314"
+        ],
+        modes: ["tool", "full"]
+      },
+      {
+        id: "t2",
+        type: "tool",
+        title: "LLM 看到哪些 Tool",
+        summary: "`run_agent_loop` 每次迭代都现取 tool defs，并按 lane 过滤。",
+        timing: "每次迭代请求 LLM 前",
+        trigger: "`TurnProcessor.run_agent_loop` 进入循环",
+        output: "当前迭代可调用工具集合",
+        mechanism: "lane 不同会改变 schema，例如 `main` lane 默认排除 `message`，防止普通对话误发外部消息。",
+        branches: [
+          "stream 与非 stream 共享同一份 tool_defs。",
+          "tool_defs 每轮现算，能反映动态注册的 MCP 工具。"
+        ],
+        anchors: [
+          "simpleclaw/agent/turn_processor.py:271",
+          "simpleclaw/agent/turn_processor.py:289",
+          "simpleclaw/agent/turn_processor.py:317"
+        ],
+        modes: ["tool", "full"]
+      },
+      {
+        id: "t3",
+        type: "tool",
+        title: "Tool Call 统一入口：Guard.execute",
+        summary: "模型返回 `tool_calls` 后，不直接执行工具，先进入 guard。",
+        timing: "每个 tool_call",
+        trigger: "`response.has_tool_calls` 为 true",
+        output: "`ToolExecutionOutcome` + 标准状态",
+        mechanism: "guard 先看 deferred，再看特化 handler，最后走默认 cast/validate/execute 管线。",
+        branches: [
+          "deferred 场景：cron/HEARTBEAT/MEMORY 写操作可排队后置。",
+          "handler 场景：`web_search`/`web_fetch` 有去重、TTL 与重试策略。"
+        ],
+        anchors: [
+          "simpleclaw/agent/turn_processor.py:328",
+          "simpleclaw/agent/turn_processor.py:351",
+          "simpleclaw/agent/tool_execution_guard.py:430",
+          "simpleclaw/agent/tool_execution_guard.py:445",
+          "simpleclaw/agent/tool_execution_guard.py:350"
+        ],
+        modes: ["tool", "full"]
+      },
+      {
+        id: "t4",
+        type: "tool",
+        title: "结果回填与下一轮推理",
+        summary: "`add_tool_result` 把结果写回 messages，模型据此继续计划。",
+        timing: "每个工具执行后",
+        trigger: "拿到 guard outcome",
+        output: "新的 message 上下文",
+        mechanism: "这是 tool 使用闭环的关键：Assistant 发调用 -> Tool 返回结果 -> Assistant 再推理，直到无 tool_call。",
+        branches: [
+          "若达到 `max_iterations`，返回固定超限文案。",
+          "`save_turn` 时会裁剪超长 tool result，控制持久化体积。"
+        ],
+        anchors: [
+          "simpleclaw/agent/context.py:485",
+          "simpleclaw/agent/turn_processor.py:367",
+          "simpleclaw/agent/turn_processor.py:388"
+        ],
+        modes: ["tool", "full"]
+      },
+      {
+        id: "f2",
+        type: "flow",
+        title: "回合提交与后置任务",
+        summary: "主回复形成后先 `save_turn`，再调度 deferred actions 与 structured memory。",
+        timing: "每轮结束",
+        trigger: "`final_content` 已确定",
+        output: "会话落库 + 异步后处理任务",
+        mechanism: "主链路优先响应，耗时写操作后置，降低用户等待并减少主 lane 阻塞。",
+        branches: [
+          "postprocess worker 会禁用 defer 拦截，避免递归后置。",
+          "structured memory 可独立开关并控制并发。"
+        ],
+        anchors: [
+          "simpleclaw/agent/turn_processor.py:658",
+          "simpleclaw/agent/turn_processor.py:668",
+          "simpleclaw/agent/turn_processor.py:681",
+          "simpleclaw/runtime/bootstrap.py:371"
+        ],
+        modes: ["full"]
+      }
+    ];
+
+    const modeName = {
+      skill: "Skill 调用机制",
+      tool: "Tool 调用机制",
+      full: "端到端全链路",
+      sequence: "序列图视图"
+    };
+
+    const typeClass = { skill: "skill", tool: "tool", flow: "flow" };
+    const typeName = { skill: "Skill", tool: "Tool", flow: "Flow" };
+    const sequenceLanes = ["User", "AgentLoop", "Context/Skills", "LLM", "ToolGuard", "ToolImpl", "Postprocess"];
+    const sequenceEvents = [
+      { from: "User", to: "AgentLoop", label: "提交消息，封装 metadata/lane/session", nodeId: "f1" },
+      { from: "AgentLoop", to: "Context/Skills", label: "构建 system prompt，注入 shared/tenant skill 层", nodeId: "s2" },
+      { from: "Context/Skills", to: "LLM", label: "发送 messages + tool schema 请求模型", nodeId: "s3" },
+      { from: "LLM", to: "AgentLoop", label: "返回 assistant 或 tool_calls", nodeId: "t2" },
+      { from: "AgentLoop", to: "ToolGuard", label: "逐个 tool_call 进入 guard.execute", nodeId: "t3" },
+      { from: "ToolGuard", to: "ToolImpl", label: "默认执行或特化 handler（web dedupe/retry）", nodeId: "t3" },
+      { from: "ToolImpl", to: "LLM", label: "回填 tool result，进入下一轮推理", nodeId: "t4" },
+      { from: "LLM", to: "AgentLoop", label: "无 tool_call 时返回 final_content", nodeId: "f2" },
+      { from: "AgentLoop", to: "Postprocess", label: "save_turn 后调度 deferred actions 与 structured memory", nodeId: "f2" }
+    ];
+
+    let mode = "full";
+    let active = 0;
+    let currentNodes = [];
+    let timer = null;
+
+    const modeBtns = document.getElementById("modeBtns");
+    const timeline = document.getElementById("timeline");
+    const badge = document.getElementById("badge");
+    const stepMeta = document.getElementById("stepMeta");
+    const timing = document.getElementById("timing");
+    const trigger = document.getElementById("trigger");
+    const output = document.getElementById("output");
+    const mechanism = document.getElementById("mechanism");
+    const branches = document.getElementById("branches");
+    const anchors = document.getElementById("anchors");
+    const seqLanes = document.getElementById("seqLanes");
+    const seqEvents = document.getElementById("seqEvents");
+    const statsSection = document.getElementById("statsSection");
+    const mechanismSection = document.getElementById("mechanismSection");
+    const branchSection = document.getElementById("branchSection");
+    const anchorSection = document.getElementById("anchorSection");
+    const matrixSection = document.getElementById("matrixSection");
+    const sequenceSection = document.getElementById("sequenceSection");
+
+    function buildModeBtns() {
+      modeBtns.innerHTML = "";
+      modes.forEach((m) => {
+        const btn = document.createElement("button");
+        btn.className = "btn" + (m.id === mode ? " active" : "");
+        btn.textContent = m.label;
+        btn.onclick = () => {
+          mode = m.id;
+          active = 0;
+          stopPlay();
+          render();
+        };
+        modeBtns.appendChild(btn);
+      });
+      badge.textContent = modeName[mode];
+    }
+
+    function filterNodes() {
+      if (mode === "sequence") {
+        currentNodes = nodes.filter((n) => n.modes.includes("full"));
+        return;
+      }
+      currentNodes = nodes.filter((n) => n.modes.includes(mode));
+    }
+
+    function renderTimeline() {
+      timeline.innerHTML = "";
+      currentNodes.forEach((n, i) => {
+        const el = document.createElement("article");
+        el.className = "node" + (i === active ? " active" : "");
+        el.innerHTML = `
+          <div class="node-top">
+            <h3 class="node-title">${String(i + 1).padStart(2, "0")}. ${n.title}</h3>
+            <span class="tag ${typeClass[n.type]}">${typeName[n.type]}</span>
+          </div>
+          <p>${n.summary}</p>
+        `;
+        el.onclick = () => {
+          active = i;
+          stopPlay();
+          render();
+        };
+        timeline.appendChild(el);
+      });
+    }
+
+    function renderDetail() {
+      const n = currentNodes[active];
+      if (!n) return;
+
+      stepMeta.textContent = `${active + 1}/${currentNodes.length} · ${typeName[n.type]}`;
+      timing.textContent = n.timing;
+      trigger.textContent = n.trigger;
+      output.textContent = n.output;
+      mechanism.textContent = n.mechanism;
+
+      branches.innerHTML = "";
+      n.branches.forEach((b) => {
+        const li = document.createElement("li");
+        li.textContent = b;
+        branches.appendChild(li);
+      });
+
+      anchors.innerHTML = "";
+      n.anchors.forEach((a) => {
+        const li = document.createElement("li");
+        li.textContent = a;
+        anchors.appendChild(li);
+      });
+
+      renderSequence(n.id);
+      applyModeVisibility();
+    }
+
+    function renderSequence(activeNodeId) {
+      seqLanes.innerHTML = "";
+      sequenceLanes.forEach((lane) => {
+        const el = document.createElement("span");
+        el.className = "seq-lane";
+        el.textContent = lane;
+        seqLanes.appendChild(el);
+      });
+
+      seqEvents.innerHTML = "";
+      sequenceEvents.forEach((evt, i) => {
+        const row = document.createElement("div");
+        row.className = "seq-event" + (evt.nodeId === activeNodeId ? " active" : "");
+        row.innerHTML = `
+          <span class="seq-idx">${String(i + 1).padStart(2, "0")}</span>
+          <span class="seq-side">${evt.from}</span>
+          <span class="seq-arrow">→</span>
+          <span class="seq-side">${evt.to}</span>
+          <span class="seq-label">${evt.label}</span>
+        `;
+        seqEvents.appendChild(row);
+      });
+    }
+
+    function applyModeVisibility() {
+      const isSequence = mode === "sequence";
+      sequenceSection.classList.toggle("hidden", !isSequence);
+      statsSection.classList.toggle("hidden", isSequence);
+      mechanismSection.classList.toggle("hidden", isSequence);
+      branchSection.classList.toggle("hidden", isSequence);
+      anchorSection.classList.toggle("hidden", isSequence);
+      matrixSection.classList.toggle("hidden", isSequence);
+    }
+
+    function next() {
+      active = (active + 1) % currentNodes.length;
+      render();
+    }
+
+    function prev() {
+      active = (active - 1 + currentNodes.length) % currentNodes.length;
+      render();
+    }
+
+    function stopPlay() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        document.getElementById("playBtn").textContent = "自动播放";
+      }
+    }
+
+    function togglePlay() {
+      if (timer) {
+        stopPlay();
+        return;
+      }
+      timer = setInterval(next, 1800);
+      document.getElementById("playBtn").textContent = "停止播放";
+    }
+
+    function render() {
+      buildModeBtns();
+      filterNodes();
+      renderTimeline();
+      renderDetail();
+    }
+
+    document.getElementById("nextBtn").onclick = () => { stopPlay(); next(); };
+    document.getElementById("prevBtn").onclick = () => { stopPlay(); prev(); };
+    document.getElementById("playBtn").onclick = togglePlay;
+
+    render();
+  </script>
+</body>
+</html>

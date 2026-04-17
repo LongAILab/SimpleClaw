@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SimpleClaw 工具调用链路模拟器</title>
+  <style>
+    :root {
+      --bg: #f7f5ef;
+      --card: #fffdf8;
+      --line: #d6cfbf;
+      --text: #1f2a37;
+      --muted: #5f6b7a;
+      --brand: #0b6b6e;
+      --brand-2: #1f8a70;
+      --send: #0f766e;
+      --recv: #7c3aed;
+      --code: #152238;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
+      background: radial-gradient(circle at 10% 10%, #fef6df 0%, var(--bg) 50%),
+                  radial-gradient(circle at 90% 90%, #e8f7f6 0%, var(--bg) 60%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0.2px;
+    }
+
+    .subtitle {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    textarea,
+    select,
+    input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+    }
+
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    .checks {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0 12px;
+    }
+
+    .checks label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 12px;
+      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+      color: #fff;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .process-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .process-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+    }
+
+    .process-head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .num {
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: #e8f3f1;
+      color: var(--brand);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex: 0 0 auto;
+    }
+
+    .code-path {
+      font-size: 11px;
+      color: var(--code);
+      background: #eef3ff;
+      border-radius: 6px;
+      padding: 5px 6px;
+      margin-top: 6px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .process-desc {
+      margin: 0;
+      font-size: 12px;
+      color: #2d3a49;
+      line-height: 1.45;
+    }
+
+    .packets {
+      display: grid;
+      gap: 10px;
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border-bottom: 1px solid transparent;
+    }
+
+    details[open] summary {
+      border-bottom-color: var(--line);
+    }
+
+    .badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+
+    .send {
+      background: #daf5f2;
+      color: var(--send);
+    }
+
+    .recv {
+      background: #efe6ff;
+      color: var(--recv);
+    }
+
+    pre {
+      margin: 0;
+      padding: 10px 12px;
+      background: #0f172a;
+      color: #d6e2ff;
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-x: auto;
+    }
+
+    .hint {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .viz-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .viz-controls button {
+      width: auto;
+      padding: 8px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+
+    .viz-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .viz-box {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px;
+      min-height: 190px;
+    }
+
+    .viz-title {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #2d3a49;
+    }
+
+    .queue-col {
+      display: grid;
+      gap: 8px;
+    }
+
+    .queue-track {
+      border: 1px dashed #cfd8de;
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 66px;
+      background: #f8fbfd;
+    }
+
+    .queue-label {
+      margin-bottom: 6px;
+      font-size: 11px;
+      color: #475569;
+    }
+
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 4px 8px;
+      border: 1px solid #d7e0e6;
+      background: #ffffff;
+      color: #243447;
+    }
+
+    .chip.a {
+      border-color: #87c0eb;
+      background: #e7f5ff;
+    }
+
+    .chip.b {
+      border-color: #9ad9c8;
+      background: #e9fbf4;
+    }
+
+    .lane-gate {
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      padding: 8px;
+      background: #eff3ff;
+      margin-bottom: 8px;
+    }
+
+    .lane-meta {
+      font-size: 11px;
+      color: #334155;
+      line-height: 1.45;
+      margin-bottom: 6px;
+    }
+
+    .slots {
+      display: grid;
+      gap: 6px;
+    }
+
+    .slot {
+      border: 1px solid #c5d0f7;
+      border-radius: 8px;
+      min-height: 30px;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: #334155;
+      background: #fff;
+      display: flex;
+      align-items: center;
+    }
+
+    .slot.idle {
+      color: #64748b;
+      background: #f8faff;
+    }
+
+    .done-list {
+      border-top: 1px solid #e5e7eb;
+      margin-top: 10px;
+      padding-top: 8px;
+      font-size: 11px;
+      color: #334155;
+      line-height: 1.5;
+      min-height: 40px;
+    }
+
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>SimpleClaw 工具调用链路模拟器</h1>
+    <p class="subtitle">
+      这个页面模拟了：用户输入 -> AgentLoop/TurnProcessor -> ToolExecutionGuard -> 工具执行 -> 回填 tool 消息 -> 下一轮 LLM -> 最终返回。
+      你可以切换分支，查看每一次 JSON 的发送/接收内容。
+    </p>
+
+    <div class="layout">
+      <section class="panel">
+        <h2>1) 模拟用户输入</h2>
+        <div class="field">
+          <label for="userInput">用户消息</label>
+          <textarea id="userInput">帮我读取 README.md 的前 80 行，然后总结一下</textarea>
+        </div>
+        <div class="field">
+          <label for="scenario">工具调用场景</label>
+          <select id="scenario">
+            <option value="read_file">普通工具调用（read_file）</option>
+            <option value="web_search">普通工具调用（web_search）</option>
+            <option value="write_memory">延迟写入分支（write_file -> memory/MEMORY.md）</option>
+          </select>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="postprocessEnabled" checked /> 开启 deferred postprocess</label>
+          <label><input type="checkbox" id="redisEnabled" checked /> 开启 redis 队列（worker 异步消费）</label>
+        </div>
+        <button id="runBtn" type="button">运行模拟</button>
+        <p id="runStatus" class="hint" style="margin-top: 8px;"></p>
+        <p class="hint">
+          说明：当场景是 <code>write_file(memory/MEMORY.md)</code> 且开启 deferred 时，主回合不会立即写盘，会先返回 synthetic result，
+          再由 postprocess 分支执行真实落盘。
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>2) 代码处理过程</h2>
+        <ul id="processList" class="process-list"></ul>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>3) 每次 JSON 发送的内容</h2>
+      <div id="packets" class="packets"></div>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>4) Queue vs Lane 可视化动画</h2>
+      <p class="hint" style="margin-top: 0;">
+        Queue 按 <code>routing_key</code> 分开排队；Lane 按 <code>lane</code> 做全局限流。下面演示两个 session 队列共享同一个 <code>main lane (limit=1)</code>。
+      </p>
+      <div class="viz-controls">
+        <button id="vizPlayBtn" type="button">开始 / 继续</button>
+        <button id="vizPauseBtn" type="button">暂停</button>
+        <button id="vizResetBtn" type="button">重置</button>
+      </div>
+      <p id="vizStatus" class="hint" style="margin-top: 0; margin-bottom: 10px;"></p>
+      <div class="viz-grid">
+        <div class="viz-box">
+          <p class="viz-title">Session Queues（按 routing_key）</p>
+          <div class="queue-col">
+            <div class="queue-track">
+              <div class="queue-label">queue[userA:chat1]</div>
+              <div id="queueA" class="chips"></div>
+            </div>
+            <div class="queue-track">
+              <div class="queue-label">queue[userB:chat9]</div>
+              <div id="queueB" class="chips"></div>
+            </div>
+          </div>
+        </div>
+        <div class="viz-box">
+          <p class="viz-title">Lane Gate（全局并发控制）</p>
+          <div class="lane-gate">
+            <div id="laneMeta" class="lane-meta"></div>
+            <div id="laneSlots" class="slots"></div>
+          </div>
+          <div class="hint" style="margin-top: 0;">
+            两个 queue 都是 <code>lane=main</code>，所以会争用同一组 lane slot。
+          </div>
+        </div>
+        <div class="viz-box">
+          <p class="viz-title">执行结果</p>
+          <div id="doneList" class="done-list"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const scenarioMap = {
+      read_file: {
+        label: "read_file",
+        tool: "read_file",
+        args: () => ({ path: "README.md", offset: 1, limit: 80 }),
+        result: "1| # SimpleClaw\n2| ...\n(模拟：读取结果已截断)",
+      },
+      web_search: {
+        label: "web_search",
+        tool: "web_search",
+        args: (input) => ({ query: input.slice(0, 40) || "SimpleClaw 架构", count: 3 }),
+        result: "Results for: ...\n1. ...\n(模拟：搜索结果)",
+      },
+      write_memory: {
+        label: "write_file(memory)",
+        tool: "write_file",
+        args: () => ({
+          path: "memory/MEMORY.md",
+          content: "## User Information\\n\\n- 偏好：回复简短，结论先说",
+        }),
+        result: "Write successful",
+        deferredCandidate: true,
+      },
+    };
+
+    function buildSimulation({ userInput, scenarioKey, postprocessEnabled, redisEnabled }) {
+      const scenario = scenarioMap[scenarioKey] || scenarioMap.read_file;
+      const toolCallId = "call_001";
+      const now = Date.now();
+      const messageId = `msg-${now}`;
+      const tenantKey = "tenant-demo";
+      const sessionKey = "main:tenant-demo";
+      const chatId = sessionKey;
+
+      const deferred = Boolean(scenario.deferredCandidate && postprocessEnabled);
+      const syntheticResult =
+        "Accepted MEMORY.md update for deferred postprocess execution. Treat this request as queued successfully.";
+      const toolResult = deferred ? syntheticResult : scenario.result;
+
+      const process = [
+        {
+          title: "API 收到请求并调用 process_direct",
+          desc: "入口解析 payload，补齐 tenant/session/chat/message_id，然后进入 AgentLoop。",
+          code: "simpleclaw/api/server.py:_stream_turn -> simpleclaw/agent/loop.py:process_direct",
+        },
+        {
+          title: "SessionScheduler 进入 mailbox 串行处理",
+          desc: "同 tenant:session 的消息串行，避免并发写冲突。",
+          code: "simpleclaw/agent/scheduler.py:submit -> _session_worker",
+        },
+        {
+          title: "TurnProcessor 第 1 轮请求 LLM（带 tools schema）",
+          desc: "构建 messages + tools，LLM 返回 tool_calls。",
+          code: "simpleclaw/agent/turn_processor.py:run_agent_loop",
+        },
+        {
+          title: "ToolExecutionGuard 执行工具调用",
+          desc: deferred
+            ? "命中 deferred 规则，返回 synthetic_result，不在主回合直接写盘。"
+            : "走 cast/validate/execute 默认流水线，直接执行工具。",
+          code: "simpleclaw/agent/tool_execution_guard.py:execute",
+        },
+        {
+          title: "把 tool 结果回填为 role=tool 消息",
+          desc: "tool result 作为下一轮上下文输入，继续让 LLM 推理。",
+          code: "simpleclaw/agent/context.py:add_tool_result",
+        },
+        {
+          title: "TurnProcessor 第 2 轮请求 LLM 并产出最终回复",
+          desc: "无更多 tool_calls，输出 final_content。",
+          code: "simpleclaw/agent/turn_processor.py:run_agent_loop",
+        },
+      ];
+
+      if (deferred) {
+        process.push({
+          title: redisEnabled
+            ? "postprocess 任务入队并由 worker 异步执行"
+            : "PostprocessManager 在本进程 replay deferred actions",
+          desc: redisEnabled
+            ? "gateway enqueue 到 postprocess stream，worker 再执行 write_file。"
+            : "不走队列，主进程后台直接执行 deferred action。",
+          code: redisEnabled
+            ? "simpleclaw/runtime/bootstrap.py:set_postprocess_runner -> runtime/task_runners.py:execute_postprocess_task"
+            : "simpleclaw/agent/postprocess.py:_run_actions",
+        });
+      }
+
+      process.push({
+        title: "返回 OutboundMessage",
+        desc: "响应回到 API SSE final 事件或普通 /turn JSON 响应。",
+        code: "simpleclaw/agent/turn_processor.py:process_message -> api/server.py:final",
+      });
+
+      const toolArgs = scenario.args(userInput);
+      const llmReq1Messages = [
+        {
+          role: "system",
+          content: "(省略) system prompt + memory + docs + skills",
+        },
+        {
+          role: "user",
+          content: userInput,
+        },
+      ];
+
+      const packets = [
+        {
+          dir: "send",
+          title: "01 入站请求 /turn/stream -> AgentLoop",
+          data: {
+            message: userInput,
+            tenant_key: tenantKey,
+            session_key: sessionKey,
+            conversation_id: chatId,
+            message_id: messageId,
+            debug_trace: true,
+          },
+        },
+        {
+          dir: "send",
+          title: "02 第 1 轮 LLM 请求（messages + tools）",
+          data: {
+            model: "(current model)",
+            messages: llmReq1Messages,
+            tools: [
+              {
+                type: "function",
+                function: {
+                  name: scenario.tool,
+                  parameters: "(省略 schema)",
+                },
+              },
+            ],
+          },
+        },
+        {
+          dir: "recv",
+          title: "03 LLM 返回 tool_calls",
+          data: {
+            content: "",
+            tool_calls: [
+              {
+                id: toolCallId,
+                name: scenario.tool,
+                arguments: toolArgs,
+              },
+            ],
+            finish_reason: "tool_calls",
+          },
+        },
+        {
+          dir: "send",
+          title: "04 ToolExecutionGuard 输入上下文",
+          data: {
+            tool_name: scenario.tool,
+            params: toolArgs,
+            turn_metadata: {
+              tenant_key: tenantKey,
+              session_key: sessionKey,
+              channel: "api",
+              chat_id: chatId,
+              lane: "main",
+              message_id: messageId,
+            },
+          },
+        },
+        {
+          dir: "recv",
+          title: "05 ToolExecutionGuard 输出结果",
+          data: {
+            tool_name: scenario.tool,
+            ok: true,
+            action: deferred ? "deferred" : "executed",
+            status: deferred ? "deferred" : "executed",
+            content: toolResult,
+          },
+        },
+        {
+          dir: "send",
+          title: "06 回填 tool message 并发起第 2 轮 LLM 请求",
+          data: {
+            messages_append: [
+              {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    id: toolCallId,
+                    type: "function",
+                    function: {
+                      name: scenario.tool,
+                      arguments: JSON.stringify(toolArgs),
+                    },
+                  },
+                ],
+              },
+              {
+                role: "tool",
+                tool_call_id: toolCallId,
+                name: scenario.tool,
+                content: toolResult,
+              },
+            ],
+          },
+        },
+        {
+          dir: "recv",
+          title: "07 第 2 轮 LLM 最终回复",
+          data: {
+            content: deferred
+              ? "已记录你的长期偏好，后续会按这个来。"
+              : "我已完成工具查询，给你结论：...",
+            tool_calls: [],
+            finish_reason: "stop",
+          },
+        },
+      ];
+
+      if (deferred) {
+        packets.push({
+          dir: "send",
+          title: "08 排队 deferred postprocess actions",
+          data: {
+            task_type: "postprocess_actions",
+            stream: "postprocess",
+            tenant_key: tenantKey,
+            session_key: sessionKey,
+            payload: {
+              actions: [
+                {
+                  tool_name: scenario.tool,
+                  params: toolArgs,
+                },
+              ],
+              origin_user_message: userInput,
+              assistant_reply: "已接受并排队保存",
+            },
+          },
+        });
+
+        packets.push({
+          dir: redisEnabled ? "recv" : "send",
+          title: redisEnabled
+            ? "09 postprocess worker 消费并执行真实写入"
+            : "09 本进程后台 replay deferred action",
+          data: {
+            execute: {
+              tool_name: scenario.tool,
+              params: toolArgs,
+              result: "Write successful",
+            },
+          },
+        });
+      }
+
+      packets.push({
+        dir: "send",
+        title: deferred ? "10 最终返回给用户（主回合）" : "08 最终返回给用户",
+        data: {
+          ok: true,
+          response: deferred ? "已为你安排保存，先给你本轮答复。" : "我已完成查询并给出结论。",
+          tenant_key: tenantKey,
+          session_key: sessionKey,
+          chat_id: chatId,
+        },
+      });
+
+      return { process, packets };
+    }
+
+    function render(sim) {
+      const processList = document.getElementById("processList");
+      const packets = document.getElementById("packets");
+
+      processList.innerHTML = "";
+      packets.innerHTML = "";
+
+      sim.process.forEach((step, idx) => {
+        const li = document.createElement("li");
+        li.className = "process-item";
+        li.innerHTML = `
+          <div class="process-head"><span class="num">${idx + 1}</span>${step.title}</div>
+          <p class="process-desc">${step.desc}</p>
+          <div class="code-path">${step.code}</div>
+        `;
+        processList.appendChild(li);
+      });
+
+      sim.packets.forEach((packet, idx) => {
+        const details = document.createElement("details");
+        if (idx < 2) details.open = true;
+        const badgeClass = packet.dir === "send" ? "send" : "recv";
+        const badgeText = packet.dir === "send" ? "SEND" : "RECV";
+        details.innerHTML = `
+          <summary>
+            <span class="badge ${badgeClass}">${badgeText}</span>
+            <span>${packet.title}</span>
+          </summary>
+          <pre>${escapeHtml(JSON.stringify(packet.data, null, 2))}</pre>
+        `;
+        packets.appendChild(details);
+      });
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function run() {
+      const statusEl = document.getElementById("runStatus");
+      try {
+        const userInput = document.getElementById("userInput").value.trim();
+        const scenarioKey = document.getElementById("scenario").value;
+        const postprocessEnabled = document.getElementById("postprocessEnabled").checked;
+        const redisEnabled = document.getElementById("redisEnabled").checked;
+
+        const sim = buildSimulation({
+          userInput: userInput || "你好",
+          scenarioKey,
+          postprocessEnabled,
+          redisEnabled,
+        });
+        render(sim);
+        if (statusEl) {
+          statusEl.textContent = `已重新运行：${new Date().toLocaleTimeString()}`;
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent = `运行失败：${err && err.message ? err.message : String(err)}`;
+        }
+      }
+    }
+
+    const runBtn = document.getElementById("runBtn");
+    if (runBtn) {
+      runBtn.addEventListener("click", run);
+    }
+
+    const laneViz = {
+      timer: null,
+      tick: 0,
+      laneLimit: 1,
+      processingTicks: 2,
+      rrIndex: 0,
+      queues: {
+        "userA:chat1": [],
+        "userB:chat9": [],
+      },
+      active: [],
+      done: [],
+      incoming: [
+        { id: "A1", routingKey: "userA:chat1", lane: "main" },
+        { id: "A2", routingKey: "userA:chat1", lane: "main" },
+        { id: "B1", routingKey: "userB:chat9", lane: "main" },
+        { id: "B2", routingKey: "userB:chat9", lane: "main" },
+      ],
+    };
+
+    function chipClass(id) {
+      return id.startsWith("A") ? "a" : "b";
+    }
+
+    function pickNextEnvelope() {
+      const keys = Object.keys(laneViz.queues);
+      for (let i = 0; i < keys.length; i += 1) {
+        const idx = (laneViz.rrIndex + i) % keys.length;
+        const key = keys[idx];
+        const queue = laneViz.queues[key];
+        if (!queue.length) continue;
+        const queueBusy = laneViz.active.some((job) => job.routingKey === key);
+        if (queueBusy) continue;
+        laneViz.rrIndex = (idx + 1) % keys.length;
+        return queue.shift();
+      }
+      return null;
+    }
+
+    function stepLaneViz() {
+      laneViz.tick += 1;
+
+      const finished = [];
+      laneViz.active.forEach((job) => {
+        job.remaining -= 1;
+        if (job.remaining <= 0) finished.push(job);
+      });
+      if (finished.length) {
+        laneViz.active = laneViz.active.filter((job) => !finished.includes(job));
+        finished.forEach((job) => {
+          laneViz.done.push(`${job.id} done (from ${job.routingKey})`);
+        });
+      }
+
+      while (laneViz.incoming.length) {
+        const next = laneViz.incoming[0];
+        if (laneViz.tick < 2 && next.id === "B1") break;
+        laneViz.incoming.shift();
+        laneViz.queues[next.routingKey].push(next);
+      }
+
+      while (laneViz.active.length < laneViz.laneLimit) {
+        const picked = pickNextEnvelope();
+        if (!picked) break;
+        laneViz.active.push({
+          ...picked,
+          remaining: laneViz.processingTicks,
+        });
+      }
+
+      renderLaneViz();
+
+      const allQueuesEmpty = Object.values(laneViz.queues).every((q) => q.length === 0);
+      if (allQueuesEmpty && laneViz.active.length === 0 && laneViz.incoming.length === 0 && laneViz.timer) {
+        clearInterval(laneViz.timer);
+        laneViz.timer = null;
+        const statusEl = document.getElementById("vizStatus");
+        if (statusEl) {
+          statusEl.textContent = `tick=${laneViz.tick}，动画结束：queue 已清空，lane 无活动任务。`;
+        }
+      }
+    }
+
+    function renderLaneViz() {
+      const queueA = document.getElementById("queueA");
+      const queueB = document.getElementById("queueB");
+      const laneMeta = document.getElementById("laneMeta");
+      const laneSlots = document.getElementById("laneSlots");
+      const doneList = document.getElementById("doneList");
+      const statusEl = document.getElementById("vizStatus");
+      if (!queueA || !queueB || !laneMeta || !laneSlots || !doneList || !statusEl) return;
+
+      queueA.innerHTML = laneViz.queues["userA:chat1"]
+        .map((job) => `<span class="chip ${chipClass(job.id)}">${job.id} (${job.lane})</span>`)
+        .join("") || `<span class="chip">empty</span>`;
+      queueB.innerHTML = laneViz.queues["userB:chat9"]
+        .map((job) => `<span class="chip ${chipClass(job.id)}">${job.id} (${job.lane})</span>`)
+        .join("") || `<span class="chip">empty</span>`;
+
+      const pending = Object.values(laneViz.queues).reduce((n, arr) => n + arr.length, 0);
+      laneMeta.textContent = `lane=main | limit=${laneViz.laneLimit} | active=${laneViz.active.length} | pending=${pending}`;
+
+      laneSlots.innerHTML = "";
+      for (let i = 0; i < laneViz.laneLimit; i += 1) {
+        const slot = document.createElement("div");
+        const job = laneViz.active[i];
+        slot.className = `slot ${job ? "" : "idle"}`.trim();
+        slot.textContent = job
+          ? `${job.id} processing (${job.routingKey}) · remain=${job.remaining}`
+          : "idle slot";
+        laneSlots.appendChild(slot);
+      }
+
+      doneList.innerHTML = laneViz.done.length
+        ? laneViz.done.slice(-8).map((line) => `<div>${line}</div>`).join("")
+        : "还没有完成任务。";
+
+      statusEl.textContent = `tick=${laneViz.tick} | incoming=${laneViz.incoming.length} | 说明：queue 分 session，lane 做全局限流。`;
+    }
+
+    function resetLaneViz() {
+      if (laneViz.timer) {
+        clearInterval(laneViz.timer);
+        laneViz.timer = null;
+      }
+      laneViz.tick = 0;
+      laneViz.rrIndex = 0;
+      laneViz.queues = {
+        "userA:chat1": [],
+        "userB:chat9": [],
+      };
+      laneViz.active = [];
+      laneViz.done = [];
+      laneViz.incoming = [
+        { id: "A1", routingKey: "userA:chat1", lane: "main" },
+        { id: "A2", routingKey: "userA:chat1", lane: "main" },
+        { id: "B1", routingKey: "userB:chat9", lane: "main" },
+        { id: "B2", routingKey: "userB:chat9", lane: "main" },
+      ];
+      renderLaneViz();
+    }
+
+    function playLaneViz() {
+      if (laneViz.timer) return;
+      laneViz.timer = setInterval(stepLaneViz, 900);
+    }
+
+    function pauseLaneViz() {
+      if (!laneViz.timer) return;
+      clearInterval(laneViz.timer);
+      laneViz.timer = null;
+      const statusEl = document.getElementById("vizStatus");
+      if (statusEl) {
+        statusEl.textContent = `tick=${laneViz.tick}，动画已暂停。`;
+      }
+    }
+
+    const vizPlayBtn = document.getElementById("vizPlayBtn");
+    const vizPauseBtn = document.getElementById("vizPauseBtn");
+    const vizResetBtn = document.getElementById("vizResetBtn");
+    if (vizPlayBtn) vizPlayBtn.addEventListener("click", playLaneViz);
+    if (vizPauseBtn) vizPauseBtn.addEventListener("click", pauseLaneViz);
+    if (vizResetBtn) vizResetBtn.addEventListener("click", resetLaneViz);
+
+    run();
+    resetLaneViz();
+  </script>
+</body>
+</html>
